@@ -1,0 +1,84 @@
+@import "tailwindcss";
+
+:root {
+  --foreground: #111214;
+  --muted: #868c94;
+  --border: #e1e4e8;
+  --surface: #ffffff;
+  --background: #fafbfc;
+  --accent: #2563eb;
+  --danger: #b91c1c;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+html {
+  background: var(--background);
+}
+
+body {
+  margin: 0;
+  background: var(--background);
+  color: var(--foreground);
+  font-family: -apple-system, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+*::selection {
+  background: rgba(37, 99, 235, 0.16);
+  color: #111214;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #b0b5bb;
+}
+
+/* Leaflet overrides */
+
+.leaflet-container {
+  background: #f0f4f8;
+  font: inherit;
+}
+
+.leaflet-container .leaflet-tile,
+.leaflet-container .leaflet-marker-icon,
+.leaflet-container .leaflet-marker-shadow,
+.leaflet-container .leaflet-image-layer,
+.leaflet-container svg,
+.leaflet-container canvas {
+  max-width: none !important;
+  max-height: none !important;
+}
+
+.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-radius: 8px 0 0 0 !important;
+  color: rgba(17, 18, 20, 0.5) !important;
+  padding: 3px 8px !important;
+  font-size: 10px !important;
+}
+
+.leaflet-control-attribution a {
+  color: rgba(17, 18, 20, 0.7) !important;
+}
