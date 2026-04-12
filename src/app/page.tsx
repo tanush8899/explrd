@@ -74,6 +74,16 @@ function ShareIcon() {
   );
 }
 
+function LogOutIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" className="h-4 w-4">
+      <path d="M10 6H7.75A2.75 2.75 0 0 0 5 8.75v6.5A2.75 2.75 0 0 0 7.75 18H10" strokeLinecap="round" />
+      <path d="M14 8.5 18 12l-4 3.5" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M18 12H9" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 function QuickAddIcon() {
   return (
     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.1" className="h-4.5 w-4.5">
@@ -469,30 +479,70 @@ type ShareMode = "passport" | "link";
 
 function ShareTab({ displayName, stats, session }: ShareTabProps) {
   const cardRef = useRef<HTMLDivElement>(null);
+  const preparedPassportFileRef = useRef<File | null>(null);
   const [shareMode, setShareMode] = useState<ShareMode>("passport");
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [linkExpiry, setLinkExpiry] = useState<string | null>(null);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [savingImage, setSavingImage] = useState(false);
+  const [preparingPassport, setPreparingPassport] = useState(false);
   const [copied, setCopied] = useState<"link" | null>(null);
 
+  const buildPassportFile = useCallback(async () => {
+    if (!cardRef.current) return null;
+
+    const html2canvas = (await import("html2canvas")).default;
+    const canvas = await html2canvas(cardRef.current, {
+      backgroundColor: null,
+      scale: 2,
+      useCORS: true,
+      logging: false,
+    });
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+    if (!blob) return null;
+    return new File([blob], "explrd-passport.png", { type: "image/png" });
+  }, []);
+
+  useEffect(() => {
+    if (shareMode !== "passport" || !cardRef.current) return;
+    if (preparedPassportFileRef.current || preparingPassport) return;
+
+    let cancelled = false;
+
+    async function preparePassport() {
+      setPreparingPassport(true);
+      try {
+        await new Promise((resolve) => window.setTimeout(resolve, 50));
+        const file = await buildPassportFile();
+        if (!cancelled) {
+          preparedPassportFileRef.current = file;
+        }
+      } finally {
+        if (!cancelled) {
+          setPreparingPassport(false);
+        }
+      }
+    }
+
+    void preparePassport();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [buildPassportFile, preparingPassport, shareMode]);
+
+  useEffect(() => {
+    preparedPassportFileRef.current = null;
+  }, [displayName, stats]);
+
   async function handleSaveImage() {
-    if (!cardRef.current) return;
     setSavingImage(true);
     try {
-      const html2canvas = (await import("html2canvas")).default;
-      const canvas = await html2canvas(cardRef.current, {
-        backgroundColor: null,
-        scale: 3,
-        useCORS: true,
-        logging: false,
-      });
-      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
-      if (!blob) return;
+      const file = preparedPassportFileRef.current ?? (await buildPassportFile());
+      if (!file) return;
+      preparedPassportFileRef.current = file;
 
-      const file = new File([blob], "explrd-passport.png", { type: "image/png" });
-
-      if (navigator.share) {
+      if (navigator.share && navigator.canShare?.({ files: [file] })) {
         try {
           await navigator.share({
             files: [file],
@@ -507,7 +557,7 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
       }
 
       // Fallback: download the image
-      const url = URL.createObjectURL(blob);
+      const url = URL.createObjectURL(file);
       const a = document.createElement("a");
       a.href = url;
       a.download = "explrd-passport.png";
@@ -607,10 +657,10 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
           <button
             type="button"
             onClick={handleSaveImage}
-            disabled={savingImage}
+            disabled={savingImage || preparingPassport}
             className="w-full rounded-[24px] bg-[#111214] px-5 py-4 text-base font-semibold text-white shadow-[0_18px_44px_rgba(17,18,20,0.18)] transition hover:bg-[#2a2d31] disabled:opacity-50"
           >
-            {savingImage ? "Preparing…" : "Share Explrd Passport"}
+            {savingImage || preparingPassport ? "Preparing…" : "Share Explrd Passport"}
           </button>
           <PassportCard displayName={displayName} stats={stats} cardRef={cardRef} />
         </div>
@@ -1233,8 +1283,30 @@ export default function Home() {
 
   if (sessionLoading || bootLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#fafbfc] px-6">
-        <p className="text-sm font-medium text-[#868c94]">Loading Explrd...</p>
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[linear-gradient(160deg,_#f8fbff_0%,_#eef4ff_38%,_#f8f3ff_100%)] px-6">
+        <div className="pointer-events-none absolute inset-0">
+          <div className="absolute left-[-8%] top-[-4%] h-56 w-56 rounded-full bg-[#8cd8ff]/30 blur-3xl animate-pulse" />
+          <div className="absolute right-[-10%] top-[18%] h-72 w-72 rounded-full bg-[#d9b0ff]/28 blur-3xl animate-pulse [animation-delay:400ms]" />
+          <div className="absolute bottom-[-8%] left-[22%] h-64 w-64 rounded-full bg-[#ffe087]/24 blur-3xl animate-pulse [animation-delay:800ms]" />
+        </div>
+
+        <div className="relative w-full max-w-sm rounded-[32px] border border-white/70 bg-white/72 p-8 text-center shadow-[0_24px_90px_rgba(70,88,140,0.18)] backdrop-blur-2xl">
+          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-white/60 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.5),_transparent_34%),linear-gradient(145deg,_#2a1a58_0%,_#111827_42%,_#0a0f1a_100%)] shadow-[0_18px_42px_rgba(17,18,20,0.22)]">
+            <div className="h-10 w-10 rounded-full border-4 border-white/18 border-t-white animate-spin" />
+          </div>
+          <div className="mt-6 text-[11px] font-bold uppercase tracking-[0.34em] text-[#7a84a1]">
+            Explrd
+          </div>
+          <div className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-[#111214]">
+            Loading your world
+          </div>
+          <p className="mt-3 text-sm leading-6 text-[#6f7888]">
+            Pulling in your map, passport, and latest places.
+          </p>
+          <div className="mt-6 overflow-hidden rounded-full bg-white/70">
+            <div className="h-1.5 w-1/2 rounded-full bg-[linear-gradient(90deg,_#6fcfff_0%,_#d2a9ff_55%,_#ffd76d_100%)] animate-[pulse_1.4s_ease-in-out_infinite]" />
+          </div>
+        </div>
       </div>
     );
   }
@@ -1362,8 +1434,9 @@ export default function Home() {
                             type="button"
                             onClick={handleLogOut}
                             disabled={loggingOut}
-                            className="flex w-full items-center justify-center rounded-lg px-3 py-2.5 text-sm font-medium text-[#111214] transition hover:bg-[#f4f5f6] disabled:opacity-50"
+                            className="flex w-full items-center justify-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium text-[#111214] transition hover:bg-[#f4f5f6] disabled:opacity-50"
                           >
+                            <LogOutIcon />
                             {loggingOut ? "Logging out..." : "Log out"}
                           </button>
                         </div>
