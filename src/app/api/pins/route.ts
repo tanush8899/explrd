@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getBoundaryQuery, normalizeAddress } from "@/lib/exploration";
+import { getBoundaryQuery, getSavableLocality } from "@/lib/exploration";
 import { resolveBoundaryFeatureCollection } from "@/lib/region-boundaries";
 import {
   getStaticContinentFeatureCollection,
@@ -73,11 +73,11 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "bad_request" }, { status: 400 });
     }
 
-    const normalized = normalizeAddress(body.address);
-    const city = normalized.normalized_city;
-    const state = normalized.normalized_state;
-    const country = normalized.normalized_country;
-    const continent = normalized.normalized_continent;
+    const normalized = getSavableLocality(body.address);
+    const city = normalized.city;
+    const state = normalized.state;
+    const country = normalized.country;
+    const continent = normalized.continent;
     const stablePlaceId = city ? getStableCityPlaceId({ city, state, country }) : body.place_id;
     const displayName = [city, state, country].filter(Boolean).join(", ") || body.display_name;
 

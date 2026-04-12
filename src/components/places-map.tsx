@@ -28,6 +28,13 @@ type PlacesMapProps = {
     lng: number;
     address: Record<string, string | number | boolean | null | undefined>;
   } | null;
+  spotlightPlace?: {
+    place_id: string;
+    display_name: string;
+    lat: number;
+    lng: number;
+    address: Record<string, string | number | boolean | null | undefined>;
+  } | null;
   heightClassName?: string;
   containerClassName?: string;
   theme?: "light" | "dark";
@@ -36,6 +43,7 @@ type PlacesMapProps = {
     topLeft: [number, number];
     bottomRight: [number, number];
   };
+  viewportResetKey?: number;
 };
 
 type BoundsTuple = [[number, number], [number, number]];
@@ -47,6 +55,9 @@ const MapContainerCompat = MapContainer as unknown as ComponentType<{
   scrollWheelZoom?: boolean;
   zoomControl?: boolean;
   preferCanvas?: boolean;
+  maxBounds?: BoundsTuple;
+  maxBoundsViscosity?: number;
+  worldCopyJump?: boolean;
 }>;
 
 const GeoJSONCompat = GeoJSON as unknown as ComponentType<{
@@ -67,6 +78,7 @@ const TileLayerCompat = TileLayer as unknown as ComponentType<{
   attribution?: string;
   maxZoom?: number;
   minZoom?: number;
+  noWrap?: boolean;
 }>;
 
 const MarkerCompat = Marker as unknown as ComponentType<{
@@ -91,6 +103,10 @@ const TILE_ATTRIBUTION = 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> 
 const DEFAULT_BOUNDS: BoundsTuple = [
   [-55, -140],
   [70, 140],
+];
+const WORLD_MAX_BOUNDS: BoundsTuple = [
+  [-85, -180],
+  [85, 180],
 ];
 const CITY_BOUNDARY_REVEAL_ZOOM = 10;
 const LAYER_VIEW_OPTIONS = [
@@ -161,21 +177,40 @@ function getFeatureCollectionBounds(featureCollection: GeoFeatureCollection | nu
 
   if (coordinates.length === 0) return null;
 
-  const lats = coordinates.map(([lat]) => lat);
-  const lngs = coordinates.map(([, lng]) => lng);
+  let minLat = coordinates[0][0];
+  let maxLat = coordinates[0][0];
+  let minLng = coordinates[0][1];
+  let maxLng = coordinates[0][1];
+
+  for (let index = 1; index < coordinates.length; index += 1) {
+    const [lat, lng] = coordinates[index];
+    if (lat < minLat) minLat = lat;
+    if (lat > maxLat) maxLat = lat;
+    if (lng < minLng) minLng = lng;
+    if (lng > maxLng) maxLng = lng;
+  }
 
   return [
-    [Math.min(...lats), Math.min(...lngs)],
-    [Math.max(...lats), Math.max(...lngs)],
+    [minLat, minLng],
+    [maxLat, maxLng],
+  ];
+}
+
+function getSpotlightBounds(lat: number, lng: number): BoundsTuple {
+  return [
+    [Math.max(-85, lat - 2), Math.max(-180, lng - 3)],
+    [Math.min(85, lat + 2), Math.min(180, lng + 3)],
   ];
 }
 
 function MapViewportController({
   bounds,
   viewportInsets,
+  resetKey,
 }: {
   bounds: BoundsTuple;
   viewportInsets?: PlacesMapProps["viewportInsets"];
+  resetKey?: number;
 }) {
   const map = useMap();
 
@@ -190,7 +225,17 @@ function MapViewportController({
     });
 
     return () => window.cancelAnimationFrame(frame);
-  }, [bounds, map, viewportInsets]);
+  }, [bounds, map, resetKey, viewportInsets]);
+
+  return null;
+}
+
+function MapBoundsGuard({ maxBounds }: { maxBounds: BoundsTuple }) {
+  const map = useMap();
+
+  useEffect(() => {
+    map.setMaxBounds(maxBounds);
+  }, [map, maxBounds]);
 
   return null;
 }
@@ -420,11 +465,13 @@ export default function PlacesMap({
   mode = "city",
   defaultLayerView = ["city"],
   previewPlace = null,
+  spotlightPlace = null,
   heightClassName = "h-[360px]",
   containerClassName = "",
   theme = "light",
   focusStrategy = "data",
   viewportInsets,
+  viewportResetKey = 0,
 }: PlacesMapProps) {
   const [mapReady, setMapReady] = useState(false);
   const [zoom, setZoom] = useState(2);
@@ -466,6 +513,10 @@ export default function PlacesMap({
     };
   }, [previewPlace]);
   const previewPlaces = useMemo(() => (previewSavedPlace ? [previewSavedPlace] : []), [previewSavedPlace]);
+  const spotlightBounds = useMemo(
+    () => (spotlightPlace ? getSpotlightBounds(spotlightPlace.lat, spotlightPlace.lng) : null),
+    [spotlightPlace]
+  );
   const fallbackBounds = useMemo(
     () => getFallbackBounds(previewSavedPlace ? previewPlaces : places, previewSavedPlace ? "city" : mode),
     [mode, places, previewPlaces, previewSavedPlace]
@@ -483,9 +534,15 @@ export default function PlacesMap({
     if (!showCityLayer) return [];
 
     return cityEntities.filter(
-      (entity) => !(zoom >= CITY_BOUNDARY_REVEAL_ZOOM && cityBoundaryIds.has(entity.id))
+      (entity) =>
+        !(zoom >= CITY_BOUNDARY_REVEAL_ZOOM && cityBoundaryIds.has(entity.id)) &&
+        !(
+          spotlightPlace &&
+          Math.abs(entity.lat - spotlightPlace.lat) < 0.0001 &&
+          Math.abs(entity.lng - spotlightPlace.lng) < 0.0001
+        )
     );
-  }, [cityBoundaryIds, cityEntities, showCityLayer, zoom]);
+  }, [cityBoundaryIds, cityEntities, showCityLayer, spotlightPlace, zoom]);
 
   const boundary = useMemo(() => {
     if (previewPlace) {
@@ -529,8 +586,15 @@ export default function PlacesMap({
     [boundary, fallbackBounds]
   );
   const bounds = useMemo(
-    () => (previewPlace ? dataBounds : focusStrategy === "world" ? DEFAULT_BOUNDS : dataBounds),
-    [dataBounds, focusStrategy, previewPlace]
+    () =>
+      previewPlace
+        ? dataBounds
+        : spotlightBounds
+          ? spotlightBounds
+          : focusStrategy === "world"
+            ? DEFAULT_BOUNDS
+            : dataBounds,
+    [dataBounds, focusStrategy, previewPlace, spotlightBounds]
   );
 
   void mapReady;
@@ -580,8 +644,12 @@ export default function PlacesMap({
         className={`${heightClassName} relative z-[1] w-full ${containerClassName}`}
         scrollWheelZoom
         zoomControl={false}
+        maxBounds={WORLD_MAX_BOUNDS}
+        maxBoundsViscosity={1}
+        worldCopyJump={false}
       >
-        <MapViewportController bounds={bounds} viewportInsets={viewportInsets} />
+        <MapViewportController bounds={bounds} viewportInsets={viewportInsets} resetKey={viewportResetKey} />
+        <MapBoundsGuard maxBounds={WORLD_MAX_BOUNDS} />
         <MapReadyReporter onReady={() => setMapReady(true)} />
         <MapZoomReporter onZoomChange={setZoom} />
 
@@ -590,6 +658,7 @@ export default function PlacesMap({
           attribution={TILE_ATTRIBUTION}
           maxZoom={18}
           minZoom={2}
+          noWrap
         />
 
         {!previewPlace && showCountryLayer
@@ -634,6 +703,15 @@ export default function PlacesMap({
             interactive={false}
           />
         )) : null}
+
+        {!previewPlace && spotlightPlace ? (
+          <MarkerCompat
+            key={`spotlight-city-marker-${spotlightPlace.place_id}`}
+            position={[spotlightPlace.lat, spotlightPlace.lng]}
+            icon={createBeaconIcon()}
+            interactive={false}
+          />
+        ) : null}
 
         {!previewPlace && showCityLayer && zoom >= CITY_BOUNDARY_REVEAL_ZOOM
           ? cityOverlays.map((overlay) => (
