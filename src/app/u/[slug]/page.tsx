@@ -13,18 +13,14 @@ type PublicProfileResponse = ApiErrorResponse & Partial<PublicProfilePayload>;
 
 const PlacesMap = dynamic(() => import("@/components/places-map"), {
   ssr: false,
-  loading: () => <div className="h-[360px] w-full animate-pulse rounded-[30px] bg-[#d3e7e5]" />,
+  loading: () => <div className="h-[360px] w-full animate-pulse rounded-xl bg-[#e8eaed]" />,
 });
 
-function ProgressBar({
-  value,
-}: {
-  value: number;
-}) {
+function ProgressBar({ value }: { value: number }) {
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-[#d8e7e5]">
+    <div className="h-1.5 overflow-hidden rounded-full bg-[#e8eaed]">
       <div
-        className="h-full rounded-full bg-[linear-gradient(90deg,#1b595a_0%,#db7f54_100%)]"
+        className="h-full rounded-full bg-[#111214]"
         style={{ width: `${Math.min(Math.max(value, 0), 100)}%` }}
       />
     </div>
@@ -71,111 +67,109 @@ export default function PublicProfilePage({
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center px-6">
-        <p className="text-sm text-[#587176]">Loading shared map...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#fafbfc] px-6">
+        <p className="text-sm font-medium text-[#868c94]">Loading shared map...</p>
       </div>
     );
   }
 
   if (error || !profile) {
     return (
-      <div className="min-h-screen px-4 py-[calc(env(safe-area-inset-top)+20px)] sm:px-6">
-        <main className="mx-auto max-w-3xl rounded-[34px] border border-white/70 bg-white/88 p-8 text-center shadow-[0_34px_80px_rgba(7,44,52,0.12)] backdrop-blur">
-          <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#4d6a6f]">Explrd</div>
-          <h1 className="mt-4 text-4xl font-semibold tracking-[-0.06em] text-[#13252a]">Public profile unavailable</h1>
-          <p className="mx-auto mt-4 max-w-md text-sm leading-7 text-[#607a7f]">
+      <div className="flex min-h-screen items-center justify-center bg-[#fafbfc] px-5">
+        <div className="w-full max-w-md text-center">
+          <div className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-[#111214] text-sm font-bold tracking-wide text-white">
+            Ex
+          </div>
+          <h1 className="mt-5 text-2xl font-semibold tracking-[-0.03em] text-[#111214]">Profile unavailable</h1>
+          <p className="mx-auto mt-3 max-w-sm text-sm leading-6 text-[#868c94]">
             {error ?? "This profile could not be found or is not public right now."}
           </p>
           <Link
             href="/login"
-            className="mt-8 inline-flex rounded-full bg-[#13252a] px-5 py-3 text-sm font-medium text-white transition hover:brightness-110"
+            className="mt-6 inline-flex rounded-xl bg-[#111214] px-5 py-2.5 text-sm font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition hover:bg-[#2a2d31]"
           >
             Open Explrd
           </Link>
-        </main>
+        </div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen px-4 pb-[calc(env(safe-area-inset-bottom)+28px)] pt-[calc(env(safe-area-inset-top)+18px)] text-[#13252a] sm:px-6">
-      <main className="mx-auto flex w-full max-w-6xl flex-col gap-4">
-        <section className="grid gap-4 lg:grid-cols-[1.02fr_0.98fr]">
-          <div className="rounded-[34px] border border-white/70 bg-[linear-gradient(135deg,rgba(255,255,255,0.88),rgba(241,249,248,0.92))] p-6 shadow-[0_34px_80px_rgba(7,44,52,0.12)] backdrop-blur sm:p-7">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#4d6a6f]">Shared map</div>
-            <h1 className="mt-4 text-5xl font-semibold leading-[0.95] tracking-[-0.06em] text-[#13252a]">
+    <div className="min-h-screen bg-[#fafbfc] px-5 pb-10 pt-[calc(env(safe-area-inset-top)+16px)] text-[#111214]">
+      <main className="mx-auto flex w-full max-w-5xl flex-col gap-5">
+        {/* Header */}
+        <section className="grid gap-5 lg:grid-cols-2">
+          <div className="rounded-xl border border-[#e1e4e8] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-[#868c94]">Shared map</div>
+            <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-[-0.03em] text-[#111214]">
               {profile.display_name || "Explrd Traveler"}
             </h1>
-            <div className="mt-3 text-sm font-medium text-[#607a7f]">@{profile.public_slug}</div>
-            <p className="mt-4 max-w-2xl text-base leading-8 text-[#607a7f]">
+            <div className="mt-2 text-sm text-[#868c94]">@{profile.public_slug}</div>
+            <p className="mt-3 max-w-lg text-sm leading-6 text-[#868c94]">
               {profile.bio?.trim() || "A map-first snapshot of the places this traveler has explored so far."}
             </p>
 
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-[24px] border border-[#d5e7e5] bg-white/82 px-4 py-4">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-[#688388]">Countries</div>
-                <div className="mt-2 text-3xl font-semibold tracking-tight text-[#13252a]">{stats.uniqueCountries}</div>
+            <div className="mt-5 grid gap-2.5 sm:grid-cols-3">
+              <div className="rounded-xl border border-[#e8eaed] bg-[#fafbfc] px-4 py-3.5">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[#868c94]">Countries</div>
+                <div className="mt-1.5 text-2xl font-semibold tracking-tight text-[#111214]">{stats.uniqueCountries}</div>
               </div>
-              <div className="rounded-[24px] border border-[#d5e7e5] bg-white/82 px-4 py-4">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-[#688388]">Cities</div>
-                <div className="mt-2 text-3xl font-semibold tracking-tight text-[#13252a]">{stats.uniqueCities}</div>
+              <div className="rounded-xl border border-[#e8eaed] bg-[#fafbfc] px-4 py-3.5">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[#868c94]">Cities</div>
+                <div className="mt-1.5 text-2xl font-semibold tracking-tight text-[#111214]">{stats.uniqueCities}</div>
               </div>
-              <div className="rounded-[24px] border border-[#d5e7e5] bg-white/82 px-4 py-4">
-                <div className="text-[11px] uppercase tracking-[0.2em] text-[#688388]">Score</div>
-                <div className="mt-2 text-3xl font-semibold tracking-tight text-[#13252a]">{stats.score}</div>
+              <div className="rounded-xl border border-[#e8eaed] bg-[#fafbfc] px-4 py-3.5">
+                <div className="text-[11px] uppercase tracking-[0.14em] text-[#868c94]">Score</div>
+                <div className="mt-1.5 text-2xl font-semibold tracking-tight text-[#111214]">{stats.score}</div>
               </div>
             </div>
           </div>
 
-          <div className="rounded-[34px] border border-white/70 bg-white/88 p-5 shadow-[0_34px_80px_rgba(7,44,52,0.1)] backdrop-blur">
+          <div className="rounded-xl border border-[#e1e4e8] bg-white p-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
             <ShareCard
-              profile={{
-                display_name: profile.display_name,
-                public_slug: profile.public_slug,
-              }}
+              profile={{ display_name: profile.display_name, public_slug: profile.public_slug }}
               stats={stats}
             />
           </div>
         </section>
 
-        <section className="rounded-[34px] border border-white/70 bg-white/88 p-3 shadow-[0_34px_80px_rgba(7,44,52,0.1)] backdrop-blur">
-          <div className="overflow-hidden rounded-[30px]">
-            <PlacesMap
-              places={places}
-              mode="country"
-              heightClassName="h-[52svh] min-h-[360px]"
-              containerClassName="h-full w-full rounded-[30px] bg-transparent"
-              theme="light"
-              focusStrategy="world"
-            />
-          </div>
+        {/* Map */}
+        <section className="overflow-hidden rounded-xl border border-[#e1e4e8] bg-white shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+          <PlacesMap
+            places={places}
+            mode="country"
+            heightClassName="h-[52svh] min-h-[360px]"
+            containerClassName="h-full w-full"
+            theme="light"
+            focusStrategy="world"
+          />
         </section>
 
-        <section className="grid gap-4 lg:grid-cols-[0.92fr_1.08fr]">
-          <div className="rounded-[32px] border border-white/70 bg-white/88 p-5 shadow-[0_24px_60px_rgba(7,44,52,0.08)] backdrop-blur">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#4d6a6f]">
-              Country coverage
-            </div>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-[#13252a]">
+        {/* Coverage & Recent */}
+        <section className="grid gap-5 lg:grid-cols-2">
+          <div className="rounded-xl border border-[#e1e4e8] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-[#868c94]">Country coverage</div>
+            <h2 className="mt-2 text-xl font-semibold tracking-[-0.02em] text-[#111214]">
               Where the map is deepest
             </h2>
 
             {coverage.length === 0 ? (
-              <div className="mt-5 rounded-[26px] border border-dashed border-[#d0e2df] bg-[#f7fbfb] px-4 py-5 text-sm text-[#607a7f]">
+              <div className="mt-4 rounded-xl border border-dashed border-[#e1e4e8] bg-[#fafbfc] px-4 py-5 text-center text-sm text-[#868c94]">
                 No saved places yet.
               </div>
             ) : (
-              <div className="mt-5 space-y-3">
+              <div className="mt-4 space-y-2.5">
                 {coverage.slice(0, 6).map((entry) => (
-                  <div key={entry.country} className="rounded-[26px] border border-[#d5e7e5] bg-[#f8fbfb] px-4 py-4">
+                  <div key={entry.country} className="rounded-xl border border-[#e8eaed] bg-[#fafbfc] px-4 py-3.5">
                     <div className="flex items-center justify-between gap-4">
                       <div>
-                        <div className="text-base font-semibold tracking-tight text-[#13252a]">{entry.country}</div>
-                        <div className="mt-1 text-sm text-[#607a7f]">
-                          {entry.exploredCities} cities • {entry.exploredPlaces} places
+                        <div className="text-sm font-semibold text-[#111214]">{entry.country}</div>
+                        <div className="mt-0.5 text-xs text-[#868c94]">
+                          {entry.exploredCities} cities · {entry.exploredPlaces} places
                         </div>
                       </div>
-                      <div className="text-right text-2xl font-semibold tracking-tight text-[#13252a]">
+                      <div className="text-lg font-semibold tracking-tight text-[#111214]">
                         {entry.percentExplored !== null ? `${entry.percentExplored}%` : entry.exploredStates}
                       </div>
                     </div>
@@ -188,24 +182,22 @@ export default function PublicProfilePage({
             )}
           </div>
 
-          <div className="rounded-[32px] border border-white/70 bg-white/88 p-5 shadow-[0_24px_60px_rgba(7,44,52,0.08)] backdrop-blur">
-            <div className="text-[11px] font-semibold uppercase tracking-[0.22em] text-[#4d6a6f]">
-              Recent places
-            </div>
-            <h2 className="mt-3 text-3xl font-semibold tracking-[-0.05em] text-[#13252a]">
+          <div className="rounded-xl border border-[#e1e4e8] bg-white p-5 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+            <div className="text-[11px] uppercase tracking-[0.14em] text-[#868c94]">Recent places</div>
+            <h2 className="mt-2 text-xl font-semibold tracking-[-0.02em] text-[#111214]">
               Latest additions
             </h2>
 
             {recentPlaces.length === 0 ? (
-              <div className="mt-5 rounded-[26px] border border-dashed border-[#d0e2df] bg-[#f7fbfb] px-4 py-5 text-sm text-[#607a7f]">
+              <div className="mt-4 rounded-xl border border-dashed border-[#e1e4e8] bg-[#fafbfc] px-4 py-5 text-center text-sm text-[#868c94]">
                 Nothing to show yet.
               </div>
             ) : (
-              <div className="mt-5 space-y-3">
+              <div className="mt-4 space-y-2.5">
                 {recentPlaces.map((place) => (
-                  <div key={place.place_id} className="rounded-[26px] border border-[#d5e7e5] bg-[#f8fbfb] px-4 py-4">
-                    <div className="text-lg font-semibold tracking-tight text-[#13252a]">{getPlaceMemoryTitle(place)}</div>
-                    <div className="mt-1 text-sm text-[#607a7f]">{getPlaceMemoryMeta(place) || "Explored geography"}</div>
+                  <div key={place.place_id} className="rounded-xl border border-[#e8eaed] bg-[#fafbfc] px-4 py-3.5">
+                    <div className="text-sm font-semibold text-[#111214]">{getPlaceMemoryTitle(place)}</div>
+                    <div className="mt-0.5 text-xs text-[#868c94]">{getPlaceMemoryMeta(place) || "Explored geography"}</div>
                   </div>
                 ))}
               </div>

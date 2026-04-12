@@ -11,8 +11,8 @@ export default function AuthCallbackPage() {
   }, []);
 
   return (
-    <div className="flex min-h-screen items-center justify-center px-6">
-      <p className="text-sm text-[#587176]">Signing you in...</p>
+    <div className="flex min-h-screen items-center justify-center bg-[#fafbfc] px-6">
+      <p className="text-sm font-medium text-[#868c94]">Signing you in...</p>
     </div>
   );
 }

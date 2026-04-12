@@ -135,9 +135,9 @@ function sanitizeTab(value: string | null): AppTab {
 
 function ProgressBar({ value }: { value: number }) {
   return (
-    <div className="h-2 overflow-hidden rounded-full bg-[#edf0f2]">
+    <div className="h-1.5 overflow-hidden rounded-full bg-[#e8eaed]">
       <div
-        className="h-full rounded-full bg-[linear-gradient(90deg,#79cfff_0%,#8de18f_100%)]"
+        className="h-full rounded-full bg-[#111214]"
         style={{ width: `${Math.max(0, Math.min(100, value))}%` }}
       />
     </div>
@@ -152,8 +152,8 @@ function SummaryPill({
   value: string | number;
 }) {
   return (
-    <div className="rounded-[22px] bg-white/88 px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,0.05)]">
-      <div className="text-[11px] uppercase tracking-[0.2em] text-[#90959b]">{label}</div>
+    <div className="rounded-xl border border-[#e8eaed] bg-white px-3.5 py-3">
+      <div className="text-[11px] uppercase tracking-[0.14em] text-[#868c94]">{label}</div>
       <div className="mt-1 text-lg font-semibold tracking-tight text-[#111214]">{value}</div>
     </div>
   );
@@ -207,11 +207,12 @@ function BottomTab({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className={`flex min-w-0 flex-1 items-center justify-center rounded-[26px] px-3 py-3 transition ${
-        active ? "bg-[#ededed] text-[#1276ff]" : "text-[#1c1c1e]"
+      className={`flex min-w-0 flex-1 items-center justify-center gap-2 rounded-xl px-3 py-2.5 text-xs font-medium transition ${
+        active ? "bg-[#111214] text-white" : "text-[#868c94] hover:text-[#111214]"
       }`}
     >
-      <span className={active ? "text-[#1276ff]" : "text-[#1c1c1e]"}>{icon}</span>
+      <span>{icon}</span>
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }
@@ -313,7 +314,7 @@ function ContinentBlock({
                                   type="button"
                                   onClick={() => onRemove(cityKey, city.places.map((place) => place.place_id))}
                                   disabled={deletingCityKey === cityKey}
-                                  className="inline-flex shrink-0 items-center gap-1 rounded-full bg-[#fff1ee] px-3 py-2 text-xs font-medium text-[#d1604d] disabled:opacity-60"
+                                  className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[#f5c6c6] bg-[#fef2f2] px-3 py-1.5 text-xs font-medium text-[#b91c1c] transition hover:bg-[#fde8e8] disabled:opacity-50"
                                 >
                                   <TrashIcon />
                                   {deletingCityKey === cityKey ? "Removing..." : "Delete"}
@@ -861,8 +862,8 @@ export default function Home() {
 
   if (sessionLoading || bootLoading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f0f4f8] px-6">
-        <p className="text-sm font-medium text-white/92">Loading Explrd...</p>
+      <div className="flex min-h-screen items-center justify-center bg-[#fafbfc] px-6">
+        <p className="text-sm font-medium text-[#868c94]">Loading Explrd...</p>
       </div>
     );
   }
@@ -882,7 +883,7 @@ export default function Home() {
   const appShellStyle = viewportHeight ? { height: `${viewportHeight}px` } : undefined;
 
   return (
-    <div className="relative overflow-hidden bg-[#f0f4f8] text-[#111214]" style={appShellStyle}>
+    <div className="relative overflow-hidden bg-[#fafbfc] text-[#111214]" style={appShellStyle}>
       <div className="absolute inset-0">
         <PlacesMap
           places={savedPlaces}
@@ -900,27 +901,19 @@ export default function Home() {
           <section className="pointer-events-auto w-full max-w-[560px]">
             <div
               style={sheetStyle}
-              className="relative overflow-hidden rounded-[38px] bg-[rgba(255,255,255,0.72)] shadow-[0_28px_80px_rgba(0,0,0,0.16)] backdrop-blur-xl"
+              className="relative overflow-hidden rounded-[28px] bg-white/85 shadow-[0_0_0_1px_rgba(0,0,0,0.04),0_16px_56px_rgba(0,0,0,0.12)] backdrop-blur-xl"
             >
-              <div
-                aria-hidden="true"
-                onPointerDown={handleSheetDragStart}
-                onTouchStart={handleSheetTouchStart}
-                className="absolute inset-x-0 top-0 z-10 h-24 touch-none"
-              />
-
               <div className="flex h-full flex-col">
                 <div
                   onPointerDown={handleSheetDragStart}
                   onTouchStart={handleSheetTouchStart}
-                  className="relative z-20 touch-none select-none px-5 pb-2 pt-3"
+                  className="relative z-20 touch-none select-none px-5 pb-2 pt-2.5"
                 >
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <h1 className="mt-2 text-[2.65rem] font-semibold leading-none tracking-[-0.07em] text-[#111214]">
-                        {activeTab === "add" ? "Add a Place" : activeTab === "places" ? "My Places" : "Share"}
-                      </h1>
-                    </div>
+                  <div className="mx-auto mb-3 h-1 w-9 rounded-full bg-[#111214]/12" />
+                  <div className="flex items-center justify-between gap-4">
+                    <h1 className="text-2xl font-semibold tracking-[-0.03em] text-[#111214]">
+                      {activeTab === "add" ? "Add a Place" : activeTab === "places" ? "My Places" : "Share"}
+                    </h1>
 
                     <div
                       ref={profileMenuRef}
@@ -930,7 +923,7 @@ export default function Home() {
                       <button
                         type="button"
                         onClick={() => setProfileMenuOpen((current) => !current)}
-                        className="flex h-14 w-14 items-center justify-center rounded-full bg-white text-base font-semibold text-[#d9ba4d] shadow-[0_12px_30px_rgba(0,0,0,0.08)]"
+                        className="flex h-10 w-10 items-center justify-center rounded-full bg-[#111214] text-xs font-semibold text-white"
                         aria-label="Open profile menu"
                         aria-expanded={profileMenuOpen}
                       >
@@ -938,12 +931,12 @@ export default function Home() {
                       </button>
 
                       {profileMenuOpen ? (
-                        <div className="absolute right-0 top-[calc(100%+10px)] w-[164px] rounded-[22px] bg-white p-2 shadow-[0_20px_50px_rgba(0,0,0,0.12)]">
+                        <div className="absolute right-0 top-[calc(100%+8px)] w-[160px] rounded-xl bg-white p-1.5 shadow-[0_8px_30px_rgba(0,0,0,0.12)] ring-1 ring-black/5">
                           <button
                             type="button"
                             onClick={handleLogOut}
                             disabled={loggingOut}
-                            className="flex w-full items-center justify-center rounded-[16px] px-4 py-3 text-sm font-medium text-[#111214] transition hover:bg-[#f6f7f8] disabled:opacity-60"
+                            className="flex w-full items-center justify-center rounded-lg px-3 py-2.5 text-sm font-medium text-[#111214] transition hover:bg-[#f4f5f6] disabled:opacity-50"
                           >
                             {loggingOut ? "Logging out..." : "Log out"}
                           </button>
@@ -962,13 +955,13 @@ export default function Home() {
                   onTouchStart={handleSheetContentTouchStart}
                 >
                   {pageError ? (
-                    <div className="rounded-[24px] bg-[#fff2ee] px-4 py-4 text-sm text-[#c95f49]">{pageError}</div>
+                    <div className="rounded-xl border border-[#f5c6c6] bg-[#fef2f2] px-4 py-3 text-sm text-[#b91c1c]">{pageError}</div>
                   ) : null}
 
                   {activeTab === "add" ? (
                     <section className="space-y-4">
                       <div className="relative">
-                        <label className="flex items-center gap-3 rounded-[24px] bg-white px-4 py-4 shadow-[0_12px_30px_rgba(0,0,0,0.04)]">
+                        <label className="flex items-center gap-3 rounded-xl border border-[#e1e4e8] bg-white px-3.5 py-3 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
                           <SearchIcon />
                           <input
                             value={q}
@@ -985,7 +978,7 @@ export default function Home() {
                         </label>
 
                         {results.length > 0 ? (
-                          <div className="absolute z-20 mt-3 w-full overflow-hidden rounded-[24px] bg-white shadow-[0_18px_50px_rgba(0,0,0,0.1)]">
+                          <div className="absolute z-20 mt-2 w-full overflow-hidden rounded-xl bg-white shadow-[0_8px_30px_rgba(0,0,0,0.1)] ring-1 ring-black/5">
                             {results.map((result) => {
                               const preview = getAddressSearchDisplay(result.address, result.display_name);
 
@@ -1005,7 +998,7 @@ export default function Home() {
                         ) : null}
                       </div>
 
-                      {searchError ? <div className="text-sm text-[#c95f49]">{searchError}</div> : null}
+                      {searchError ? <div className="rounded-xl border border-[#f5c6c6] bg-[#fef2f2] px-3.5 py-3 text-sm text-[#b91c1c]">{searchError}</div> : null}
 
                       {selected && selectedDisplay && selectedNormalized ? (
                         <div className="rounded-[28px] bg-[#f6f7f8] p-4">
@@ -1031,7 +1024,7 @@ export default function Home() {
                               type="button"
                               onClick={saveSelected}
                               disabled={saving}
-                              className="inline-flex items-center gap-2 rounded-full bg-[#1276ff] px-5 py-3 text-sm font-medium text-white disabled:opacity-60"
+                              className="inline-flex items-center gap-2 rounded-xl bg-[#111214] px-5 py-3 text-sm font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition hover:bg-[#2a2d31] disabled:opacity-40"
                             >
                               <PlusIcon />
                               {saving ? "Adding..." : "Add place"}
@@ -1039,7 +1032,7 @@ export default function Home() {
                             <button
                               type="button"
                               onClick={resetComposer}
-                              className="rounded-full bg-white px-5 py-3 text-sm font-medium text-[#1c1c1e]"
+                              className="rounded-xl border border-[#e1e4e8] bg-white px-5 py-3 text-sm font-medium text-[#3d4249] transition hover:bg-[#f8f9fa]"
                             >
                               Clear
                             </button>
@@ -1111,7 +1104,7 @@ export default function Home() {
                 </div>
 
                 <div className="px-4 pb-4 pt-1">
-                  <div className="flex items-stretch gap-2 rounded-[32px] bg-white p-2 shadow-[0_16px_40px_rgba(0,0,0,0.05)]">
+                  <div className="flex items-stretch gap-1.5 rounded-2xl bg-[#f4f5f6] p-1.5">
                     <BottomTab
                       active={activeTab === "add"}
                       icon={<PlusIcon />}

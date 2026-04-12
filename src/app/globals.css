@@ -1,9 +1,13 @@
 @import "tailwindcss";
 
 :root {
-  --background: #74cdfc;
   --foreground: #111214;
-  --selection-bg: rgba(18, 118, 255, 0.22);
+  --muted: #868c94;
+  --border: #e1e4e8;
+  --surface: #ffffff;
+  --background: #fafbfc;
+  --accent: #2563eb;
+  --danger: #b91c1c;
 }
 
 html,
@@ -12,14 +16,14 @@ body {
 }
 
 html {
-  background: #f0f4f8;
+  background: var(--background);
 }
 
 body {
   margin: 0;
-  background: #f0f4f8;
+  background: var(--background);
   color: var(--foreground);
-  font-family: "Avenir Next", "Avenir Next Rounded", "SF Pro Display", "Helvetica Neue", sans-serif;
+  font-family: -apple-system, "SF Pro Display", "Helvetica Neue", system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -29,7 +33,7 @@ body {
 }
 
 *::selection {
-  background: var(--selection-bg);
+  background: rgba(37, 99, 235, 0.16);
   color: #111214;
 }
 
@@ -47,16 +51,14 @@ select {
 
 input::placeholder,
 textarea::placeholder {
-  color: rgba(122, 127, 134, 0.8);
+  color: #b0b5bb;
 }
+
+/* Leaflet overrides */
 
 .leaflet-container {
-  background: transparent;
+  background: #f0f4f8;
   font: inherit;
-}
-
-.leaflet-container[data-map-theme="dark"] {
-  background: transparent;
 }
 
 .leaflet-container .leaflet-tile,
@@ -70,12 +72,13 @@ textarea::placeholder {
 }
 
 .leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.72) !important;
-  border-radius: 18px 0 0 0;
-  color: rgba(17, 18, 20, 0.65) !important;
-  padding: 4px 10px !important;
+  background: rgba(255, 255, 255, 0.8) !important;
+  border-radius: 8px 0 0 0 !important;
+  color: rgba(17, 18, 20, 0.5) !important;
+  padding: 3px 8px !important;
+  font-size: 10px !important;
 }
 
 .leaflet-control-attribution a {
-  color: rgba(17, 18, 20, 0.9) !important;
+  color: rgba(17, 18, 20, 0.7) !important;
 }
