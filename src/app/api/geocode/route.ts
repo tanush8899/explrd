@@ -61,6 +61,27 @@ function setCachedResults(query: string, results: unknown[]) {
   });
 }
 
+function getSearchDedupKey(result: {
+  display_name: string;
+  lat: number;
+  lng: number;
+  address: Record<string, string | number | boolean | null | undefined>;
+}) {
+  const normalized = normalizeAddress(result.address);
+  const title =
+    normalized.normalized_city ??
+    normalized.normalized_state ??
+    normalized.normalized_country ??
+    result.display_name.split(",")[0]?.trim() ??
+    result.display_name;
+
+  return [
+    title.trim().toLowerCase(),
+    normalized.normalized_state?.trim().toLowerCase() ?? "",
+    normalized.normalized_country?.trim().toLowerCase() ?? "",
+  ].join("|");
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const q = (url.searchParams.get("q") ?? "").trim();
@@ -161,7 +182,17 @@ export async function GET(req: Request) {
       return ALLOWED_CITY_LEVEL_TYPES.has(kind);
     });
 
-  setCachedResults(q.toLowerCase(), results);
+  const dedupedResults = Array.from(
+    results.reduce((unique, result) => {
+      const dedupKey = getSearchDedupKey(result);
+      if (!unique.has(dedupKey)) {
+        unique.set(dedupKey, result);
+      }
+      return unique;
+    }, new Map<string, (typeof results)[number]>()).values()
+  );
 
-  return NextResponse.json({ results });
+  setCachedResults(q.toLowerCase(), dedupedResults);
+
+  return NextResponse.json({ results: dedupedResults });
 }

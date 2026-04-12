@@ -96,6 +96,28 @@ export function normalizeAddress(address: AddressRecord): NormalizedGeography {
   };
 }
 
+export function getSavableLocality(address: AddressRecord) {
+  const normalized = normalizeAddress(address);
+  const normalized_city = normalized.normalized_city;
+  const normalized_state = normalized.normalized_state;
+  const normalized_country = normalized.normalized_country;
+
+  const city =
+    normalized_city ??
+    (!normalized_city && !normalized_state && normalized_country ? normalized_country : null);
+
+  return {
+    city,
+    state: normalized_state,
+    country: normalized_country,
+    continent: normalized.normalized_continent,
+    normalized_city: city,
+    normalized_state,
+    normalized_country,
+    normalized_continent: normalized.normalized_continent,
+  };
+}
+
 function getCountryCode(address: AddressRecord) {
   return typeof address.country_code === "string" ? cleanCode(address.country_code) : null;
 }

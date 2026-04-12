@@ -11,8 +11,15 @@ export async function signInWithGoogle() {
 }
 
 export async function signUpWithEmail(email: string, password: string) {
-  const { error } = await supabase.auth.signUp({ email, password });
+  const { data, error } = await supabase.auth.signUp({ email, password });
   if (error) throw error;
+  // If email confirmation is enabled, Supabase returns a user with no session
+  if (data.session === null && data.user?.identities?.length === 0) {
+    throw new Error("An account with this email already exists.");
+  }
+  if (data.session === null) {
+    throw new Error("Check your email to confirm your account before signing in.");
+  }
 }
 
 export async function signInWithEmail(email: string, password: string) {
