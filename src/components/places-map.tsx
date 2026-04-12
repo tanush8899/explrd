@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
-import { CircleMarker, GeoJSON, MapContainer, TileLayer, useMap, useMapEvents } from "react-leaflet";
+import L from "leaflet";
+import { GeoJSON, MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
 import {
   getBoundaryQuery,
   getExplorationLabel,
@@ -58,6 +59,7 @@ const GeoJSONCompat = GeoJSON as unknown as ComponentType<{
   };
   interactive?: boolean;
   key?: string;
+  smoothFactor?: number;
 }>;
 
 const TileLayerCompat = TileLayer as unknown as ComponentType<{
@@ -67,27 +69,30 @@ const TileLayerCompat = TileLayer as unknown as ComponentType<{
   minZoom?: number;
 }>;
 
-const CircleMarkerCompat = CircleMarker as unknown as ComponentType<{
-  center: [number, number];
-  radius?: number;
-  pathOptions?: {
-    color?: string;
-    fillColor?: string;
-    fillOpacity?: number;
-    opacity?: number;
-    weight?: number;
-  };
+const MarkerCompat = Marker as unknown as ComponentType<{
+  position: [number, number];
+  icon?: L.DivIcon;
   interactive?: boolean;
+  key?: string;
 }>;
 
-const TILE_URL = "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png";
-const TILE_ATTRIBUTION = '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> &copy; <a href="https://carto.com/">CARTO</a>';
+function createBeaconIcon(): L.DivIcon {
+  return L.divIcon({
+    className: "city-beacon-wrapper",
+    html: `<div class="city-beacon"><div class="city-beacon-core" style="background:#007AFF"></div></div>`,
+    iconSize: [20, 20],
+    iconAnchor: [10, 10],
+  });
+}
+
+const TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
+const TILE_ATTRIBUTION = 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012';
 
 const DEFAULT_BOUNDS: BoundsTuple = [
   [-55, -140],
   [70, 140],
 ];
-const CITY_BOUNDARY_REVEAL_ZOOM = 6;
+const CITY_BOUNDARY_REVEAL_ZOOM = 10;
 const LAYER_VIEW_OPTIONS = [
   { key: "country", label: "Country" },
   { key: "state", label: "State" },
@@ -593,11 +598,12 @@ export default function PlacesMap({
                 key={`country-${overlay.id}`}
                 data={overlay.featureCollection}
                 interactive={false}
+                smoothFactor={0}
                 style={() => ({
-                  color: theme === "dark" ? "#93c5fd" : "#1d4ed8",
+                  color: theme === "dark" ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.4)",
                   fillColor: theme === "dark" ? "#2563eb" : "#3b82f6",
-                  fillOpacity: showStateLayer || showCityLayer ? 0.03 : 0.06,
-                  weight: 2.1,
+                  fillOpacity: showStateLayer || showCityLayer ? 0.3 : 0.42,
+                  weight: 0.8,
                 })}
               />
             ))
@@ -609,29 +615,23 @@ export default function PlacesMap({
                 key={`state-${overlay.id}`}
                 data={overlay.featureCollection}
                 interactive={false}
+                smoothFactor={0}
                 style={() => ({
-                  color: theme === "dark" ? "#38bdf8" : "#0f766e",
+                  color: theme === "dark" ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.4)",
                   fillColor: theme === "dark" ? "#06b6d4" : "#14b8a6",
-                  fillOpacity: showCountryLayer || showCityLayer ? 0.14 : 0.2,
-                  weight: 1.35,
+                  fillOpacity: showCountryLayer || showCityLayer ? 0.35 : 0.48,
+                  weight: 0.8,
                 })}
               />
             ))
           : null}
 
         {!previewPlace ? visibleCityMarkers.map((city) => (
-          <CircleMarkerCompat
+          <MarkerCompat
             key={`city-marker-${city.id}`}
-            center={[city.lat, city.lng]}
-            radius={zoom >= CITY_BOUNDARY_REVEAL_ZOOM - 1 ? 5.5 : 4.5}
+            position={[city.lat, city.lng]}
+            icon={createBeaconIcon()}
             interactive={false}
-            pathOptions={{
-              color: "#ffffff",
-              fillColor: theme === "dark" ? "#2563eb" : "#2563eb",
-              fillOpacity: 0.92,
-              opacity: 1,
-              weight: 1.5,
-            }}
           />
         )) : null}
 
@@ -641,11 +641,12 @@ export default function PlacesMap({
                 key={`city-${overlay.id}`}
                 data={overlay.featureCollection}
                 interactive={false}
+                smoothFactor={0}
                 style={() => ({
-                  color: theme === "dark" ? "#34d399" : "#0f766e",
+                  color: theme === "dark" ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.4)",
                   fillColor: theme === "dark" ? "#10b981" : "#14b8a6",
-                  fillOpacity: 0.24,
-                  weight: 1.5,
+                  fillOpacity: 0.5,
+                  weight: 0.8,
                 })}
               />
             ))
@@ -657,11 +658,12 @@ export default function PlacesMap({
                 key={`preview-city-${overlay.id}`}
                 data={overlay.featureCollection}
                 interactive={false}
+                smoothFactor={0}
                 style={() => ({
-                  color: "#111214",
+                  color: "rgba(0,0,0,0.4)",
                   fillColor: "#f59e0b",
-                  fillOpacity: 0.24,
-                  weight: 2.1,
+                  fillOpacity: 0.5,
+                  weight: 0.8,
                 })}
               />
             ))

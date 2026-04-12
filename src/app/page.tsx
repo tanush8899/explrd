@@ -12,7 +12,7 @@ import { getPlaceHierarchy, type ContinentNode } from "@/lib/journey";
 import { getExplrdStats } from "@/lib/stats";
 import type { ApiErrorResponse, SavedPlace, UserProfile } from "@/lib/types";
 import { useSession } from "@/lib/use-session";
-import ShareCard from "@/components/share-card";
+import { PassportCard } from "@/components/share-card";
 
 type Address = Record<string, string | number | boolean | null | undefined>;
 
@@ -362,6 +362,208 @@ function ContinentBlock({
             </div>
           </div>
         ))}
+      </div>
+    </section>
+  );
+}
+
+// ─── ShareTab ──────────────────────────────────────────────────────────────
+
+type ShareTabProps = {
+  displayName: string;
+  stats: ReturnType<typeof getExplrdStats>;
+  session: import("@supabase/supabase-js").Session | null;
+};
+
+function ShareTab({ displayName, stats, session }: ShareTabProps) {
+  const cardRef = useRef<HTMLDivElement>(null);
+  const [shareLink, setShareLink] = useState<string | null>(null);
+  const [linkExpiry, setLinkExpiry] = useState<string | null>(null);
+  const [generatingLink, setGeneratingLink] = useState(false);
+  const [savingImage, setSavingImage] = useState(false);
+  const [copied, setCopied] = useState<"link" | "image" | null>(null);
+
+  async function handleSaveImage() {
+    if (!cardRef.current) return;
+    setSavingImage(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(cardRef.current, {
+        backgroundColor: null,
+        scale: 3,
+        useCORS: true,
+        logging: false,
+      });
+      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+      if (!blob) return;
+
+      const file = new File([blob], "explrd-passport.png", { type: "image/png" });
+
+      if (navigator.share) {
+        try {
+          await navigator.share({
+            files: [file],
+            title: `${displayName}'s Explrd Passport`,
+          });
+          return;
+        } catch (err) {
+          // User cancelled — don't fall through to download
+          if (err instanceof Error && err.name === "AbortError") return;
+          // Share failed (e.g. file sharing not supported) — fall through to download
+        }
+      }
+
+      // Fallback: download the image
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "explrd-passport.png";
+      a.click();
+      URL.revokeObjectURL(url);
+    } finally {
+      setSavingImage(false);
+    }
+  }
+
+  async function handleCopyImage() {
+    if (!cardRef.current) return;
+    setSavingImage(true);
+    try {
+      const html2canvas = (await import("html2canvas")).default;
+      const canvas = await html2canvas(cardRef.current, { backgroundColor: null, scale: 3, useCORS: true, logging: false });
+      const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
+      if (!blob) return;
+      if (typeof ClipboardItem !== "undefined" && navigator.clipboard?.write) {
+        await navigator.clipboard.write([new ClipboardItem({ "image/png": blob })]);
+        setCopied("image");
+        setTimeout(() => setCopied(null), 2000);
+      } else {
+        // Mobile Safari doesn't support clipboard.write — fall back to download
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = "explrd-passport.png";
+        a.click();
+        URL.revokeObjectURL(url);
+      }
+    } finally {
+      setSavingImage(false);
+    }
+  }
+
+  async function handleGenerateLink() {
+    if (!session) return;
+    setGeneratingLink(true);
+    try {
+      const res = await fetch("/api/share-link", {
+        method: "POST",
+        headers: { authorization: `Bearer ${session.access_token}` },
+      });
+      const json = await res.json() as { token?: string; expiresAt?: string };
+      if (json.token) {
+        const url = `${window.location.origin}/s/${json.token}`;
+        setShareLink(url);
+        setLinkExpiry(json.expiresAt ?? null);
+      }
+    } finally {
+      setGeneratingLink(false);
+    }
+  }
+
+  async function handleCopyLink() {
+    if (!shareLink) return;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(shareLink);
+      } else {
+        // Fallback for mobile Safari
+        const el = document.createElement("textarea");
+        el.value = shareLink;
+        el.style.position = "fixed";
+        el.style.opacity = "0";
+        document.body.appendChild(el);
+        el.focus();
+        el.select();
+        document.execCommand("copy");
+        document.body.removeChild(el);
+      }
+      setCopied("link");
+      setTimeout(() => setCopied(null), 2000);
+    } catch {
+      // If all else fails, do nothing silently
+    }
+  }
+
+  const expiryLabel = linkExpiry
+    ? (() => {
+        const diff = Math.ceil((new Date(linkExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        return diff <= 0 ? "Expired" : diff === 1 ? "Expires tomorrow" : `Expires in ${diff} days`;
+      })()
+    : null;
+
+  return (
+    <section className="space-y-3">
+      {/* Passport card */}
+      <PassportCard displayName={displayName} stats={stats} cardRef={cardRef} />
+
+      {/* Image action — opens native share sheet */}
+      <button
+        type="button"
+        onClick={handleSaveImage}
+        disabled={savingImage}
+        className="w-full rounded-2xl bg-[#111214] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#2a2d31] disabled:opacity-50"
+      >
+        {savingImage ? "Preparing…" : "Share Passport"}
+      </button>
+
+      {/* Share link */}
+      <div className="rounded-[24px] border border-[#e1e4e8] bg-white px-5 py-4 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
+        <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9ca1a8]">
+          Explrd Link
+        </div>
+        <div className="mt-1.5 text-base font-semibold tracking-[-0.02em] text-[#111214]">
+          Share your map
+        </div>
+        <p className="mt-1 text-[13px] leading-5 text-[#868c94]">
+          Anyone with the link can browse your visited places — no sign-in required. Expires in 7 days.
+        </p>
+
+        {shareLink ? (
+          <div className="mt-3 space-y-2">
+            <div className="flex items-center gap-2 overflow-hidden rounded-xl border border-[#e8eaed] bg-[#fafbfc] px-3 py-2.5">
+              <span className="flex-1 truncate text-[12px] font-medium text-[#3d4249]">{shareLink}</span>
+              {expiryLabel && (
+                <span className="shrink-0 text-[10px] text-[#9ca1a8]">{expiryLabel}</span>
+              )}
+            </div>
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={handleCopyLink}
+                className="flex-1 rounded-xl bg-[#111214] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#2a2d31]"
+              >
+                {copied === "link" ? "Copied!" : "Copy"}
+              </button>
+              <button
+                type="button"
+                onClick={handleGenerateLink}
+                disabled={generatingLink}
+                className="rounded-xl border border-[#e1e4e8] bg-white px-4 py-2.5 text-sm font-medium text-[#111214] transition hover:bg-[#f6f7f8] disabled:opacity-50"
+              >
+                Refresh
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            type="button"
+            onClick={handleGenerateLink}
+            disabled={generatingLink}
+            className="mt-3 w-full rounded-xl bg-[#111214] px-4 py-2.5 text-sm font-medium text-white transition hover:bg-[#2a2d31] disabled:opacity-50"
+          >
+            {generatingLink ? "Generating…" : "Generate Link"}
+          </button>
+        )}
       </div>
     </section>
   );
@@ -1160,25 +1362,7 @@ export default function Home() {
                     ) : null}
 
                     {activeTab === "share" ? (
-                      <section className="space-y-4">
-                        <ShareCard
-                          profile={{
-                            display_name: profile?.display_name ?? displayName,
-                            public_slug: profile?.public_slug ?? null,
-                          }}
-                          stats={stats}
-                        />
-
-                        <div className="rounded-[28px] bg-[#f6f7f8] px-5 py-4">
-                          <div className="text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9ca1a8]">Share</div>
-                          <div className="mt-2.5 text-xl font-semibold tracking-[-0.03em] text-[#111214]">
-                            Share your map
-                          </div>
-                          <p className="mt-2 text-sm leading-6 text-[#8c9198]">
-                            A public profile link is on the way — one clean URL, your whole map.
-                          </p>
-                        </div>
-                      </section>
+                      <ShareTab displayName={displayName} stats={stats} session={session} />
                     ) : null}
                   </div>
                 )}
