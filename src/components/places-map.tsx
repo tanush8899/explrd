@@ -101,8 +101,8 @@ const TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Str
 const TILE_ATTRIBUTION = 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012';
 
 const DEFAULT_BOUNDS: BoundsTuple = [
-  [-55, -140],
-  [70, 140],
+  [-60, -179],
+  [82, 179],
 ];
 const WORLD_MAX_BOUNDS: BoundsTuple = [
   [-85, -180],

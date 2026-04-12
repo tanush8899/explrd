@@ -194,6 +194,8 @@ export function getCountryCoverage(places: SavedPlace[]): CountryCoverage[] {
       const iso2 = getCountryIso2(entry.country);
       const totalStates = iso2 ? firstLevelSubdivisionCounts.get(iso2) ?? null : null;
       const exploredStates = entry.states.size;
+      const effectiveExploredStates =
+        exploredStates > 0 ? exploredStates : entry.cities.size > 0 ? 1 : 0;
 
       return {
         country: entry.country,
@@ -202,7 +204,7 @@ export function getCountryCoverage(places: SavedPlace[]): CountryCoverage[] {
         exploredCities: entry.cities.size,
         exploredStates,
         totalStates,
-        percentExplored: totalStates ? getPercent(exploredStates, totalStates) : null,
+        percentExplored: totalStates ? getPercent(Math.min(effectiveExploredStates, totalStates), totalStates) : entry.cities.size > 0 ? 1 : null,
         latestPlace: entry.places[0] ? getPlaceMemoryTitle(entry.places[0]) : null,
         states: Array.from(entry.states).sort((left, right) => left.localeCompare(right)),
       } satisfies CountryCoverage;
