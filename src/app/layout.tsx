@@ -2,6 +2,7 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import type { Viewport } from "next";
 import "leaflet/dist/leaflet.css";
+import { Analytics } from "@vercel/analytics/next";
 
 export const metadata = {
   title: "Explrd",
@@ -23,7 +24,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        {children}
+        <Analytics />
+      </body>
     </html>
   );
 }
