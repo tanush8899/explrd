@@ -18,6 +18,30 @@ import { PassportCard } from "@/components/share-card";
 
 type Address = Record<string, string | number | boolean | null | undefined>;
 
+const SEARCH_PLACEHOLDERS = [
+  "Add a city you've explored...",
+  "Where have you been?",
+  "Drop a pin on your travels...",
+  "Search a city or town...",
+  "What's your next stamp?",
+];
+
+const LOADING_PHRASES = [
+  "Mapping your world",
+  "Loading your places",
+  "Charting continents",
+  "Building your passport",
+  "Pinning your cities",
+  "Counting your countries",
+  "Tracing your routes",
+  "Gathering your stamps",
+];
+
+const MAP_VIEWPORT_INSETS = {
+  topLeft: [20, 92] as [number, number],
+  bottomRight: [20, 320] as [number, number],
+};
+
 type GeoResult = {
   place_id: string;
   display_name: string;
@@ -479,68 +503,30 @@ type ShareMode = "passport" | "link";
 
 function ShareTab({ displayName, stats, session }: ShareTabProps) {
   const cardRef = useRef<HTMLDivElement>(null);
-  const preparedPassportFileRef = useRef<File | null>(null);
+
   const [shareMode, setShareMode] = useState<ShareMode>("passport");
   const [shareLink, setShareLink] = useState<string | null>(null);
   const [linkExpiry, setLinkExpiry] = useState<string | null>(null);
   const [generatingLink, setGeneratingLink] = useState(false);
   const [savingImage, setSavingImage] = useState(false);
-  const [preparingPassport, setPreparingPassport] = useState(false);
   const [copied, setCopied] = useState<"link" | null>(null);
 
   const buildPassportFile = useCallback(async () => {
     if (!cardRef.current) return null;
 
-    const html2canvas = (await import("html2canvas")).default;
-    const canvas = await html2canvas(cardRef.current, {
-      backgroundColor: null,
-      scale: 2,
-      useCORS: true,
-      logging: false,
-    });
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, "image/png"));
-    if (!blob) return null;
+    const { toPng } = await import("html-to-image");
+    const dataUrl = await toPng(cardRef.current, { pixelRatio: 2 });
+    const res = await fetch(dataUrl);
+    const blob = await res.blob();
     return new File([blob], "explrd-passport.png", { type: "image/png" });
   }, []);
 
-  useEffect(() => {
-    if (shareMode !== "passport" || !cardRef.current) return;
-    if (preparedPassportFileRef.current || preparingPassport) return;
-
-    let cancelled = false;
-
-    async function preparePassport() {
-      setPreparingPassport(true);
-      try {
-        await new Promise((resolve) => window.setTimeout(resolve, 50));
-        const file = await buildPassportFile();
-        if (!cancelled) {
-          preparedPassportFileRef.current = file;
-        }
-      } finally {
-        if (!cancelled) {
-          setPreparingPassport(false);
-        }
-      }
-    }
-
-    void preparePassport();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [buildPassportFile, preparingPassport, shareMode]);
-
-  useEffect(() => {
-    preparedPassportFileRef.current = null;
-  }, [displayName, stats]);
 
   async function handleSaveImage() {
     setSavingImage(true);
     try {
-      const file = preparedPassportFileRef.current ?? (await buildPassportFile());
+      const file = await buildPassportFile();
       if (!file) return;
-      preparedPassportFileRef.current = file;
 
       if (navigator.share && navigator.canShare?.({ files: [file] })) {
         try {
@@ -632,7 +618,7 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
         >
           <div className="flex items-center gap-2.5">
             <PassportIcon />
-            <div className="text-sm font-semibold tracking-tight">Share Explrd Passport</div>
+            <div className="text-sm font-semibold tracking-tight">Explrd Passport</div>
           </div>
         </button>
 
@@ -657,36 +643,31 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
           <button
             type="button"
             onClick={handleSaveImage}
-            disabled={savingImage || preparingPassport}
+            disabled={savingImage}
             className="w-full rounded-[24px] bg-[#111214] px-5 py-4 text-base font-semibold text-white shadow-[0_18px_44px_rgba(17,18,20,0.18)] transition hover:bg-[#2a2d31] disabled:opacity-50"
           >
-            {savingImage || preparingPassport ? "Preparing…" : "Share Explrd Passport"}
+            {savingImage ? "Preparing…" : "Share Passport"}
           </button>
           <PassportCard displayName={displayName} stats={stats} cardRef={cardRef} />
         </div>
       ) : (
-        <div className="rounded-[28px] border border-[#e1e4e8] bg-white px-5 py-5 shadow-[0_18px_44px_rgba(17,18,20,0.08)]">
-          <div className="text-[10px] font-semibold uppercase tracking-[0.22em] text-[#9ca1a8]">
-            Explrd Link
-          </div>
-          <div className="mt-1.5 text-lg font-semibold tracking-[-0.03em] text-[#111214]">
-            Share your map
-          </div>
-          <p className="mt-2 text-[13px] leading-5 text-[#868c94]">
-            Anyone with the link can browse your visited places. No sign-in required. Expires in 7 days.
+        <div className="rounded-[28px] bg-[#f7f8f9] px-5 py-5">
+          <div className="text-base font-semibold tracking-[-0.02em] text-[#111214]">Share your map</div>
+          <p className="mt-1 text-[13px] leading-5 text-[#868c94]">
+            Anyone with the link can browse your places. No sign-in required. Expires in 7 days.
           </p>
 
           {shareLink ? (
             <div className="mt-4 space-y-3">
-              <div className="flex items-center gap-2 overflow-hidden rounded-2xl border border-[#e8eaed] bg-[#fafbfc] px-3 py-3">
-                <span className="flex-1 truncate text-[12px] font-medium text-[#3d4249]">{shareLink}</span>
+              <div className="flex items-center gap-2 overflow-hidden rounded-[18px] bg-white px-3.5 py-3 shadow-[0_1px_3px_rgba(0,0,0,0.06)]">
+                <span className="flex-1 truncate font-mono text-[11px] text-[#4d5560]">{shareLink}</span>
                 {expiryLabel ? <span className="shrink-0 text-[10px] text-[#9ca1a8]">{expiryLabel}</span> : null}
               </div>
-              <div className="grid grid-cols-2 gap-3">
+              <div className="grid grid-cols-2 gap-2.5">
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="rounded-xl bg-[#111214] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#2a2d31]"
+                  className="rounded-[18px] bg-[#111214] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#2a2d31]"
                 >
                   {copied === "link" ? "Copied!" : "Copy Link"}
                 </button>
@@ -694,9 +675,9 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
                   type="button"
                   onClick={handleGenerateLink}
                   disabled={generatingLink}
-                  className="rounded-xl border border-[#e1e4e8] bg-white px-4 py-3 text-sm font-medium text-[#111214] transition hover:bg-[#f6f7f8] disabled:opacity-50"
+                  className="rounded-[18px] bg-white px-4 py-3 text-sm font-semibold text-[#111214] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#f0f1f3] disabled:opacity-50"
                 >
-                  {generatingLink ? "Refreshing…" : "Refresh Link"}
+                  {generatingLink ? "Refreshing…" : "New Link"}
                 </button>
               </div>
             </div>
@@ -705,7 +686,7 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
               type="button"
               onClick={handleGenerateLink}
               disabled={generatingLink}
-              className="mt-4 w-full rounded-xl bg-[#111214] px-4 py-3 text-sm font-medium text-white transition hover:bg-[#2a2d31] disabled:opacity-50"
+              className="mt-4 w-full rounded-[18px] bg-[#111214] px-4 py-3.5 text-sm font-semibold text-white transition hover:bg-[#2a2d31] disabled:opacity-50"
             >
               {generatingLink ? "Generating…" : "Generate Link"}
             </button>
@@ -719,6 +700,7 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
 export default function Home() {
   const { loading: sessionLoading, session, user } = useSession();
   const [bootLoading, setBootLoading] = useState(false);
+  const [loadingWordIndex, setLoadingWordIndex] = useState(0);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [savedPlaces, setSavedPlaces] = useState<SavedPlace[]>([]);
   const [pageError, setPageError] = useState<string | null>(null);
@@ -748,6 +730,7 @@ export default function Home() {
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [sheetOffset, setSheetOffset] = useState<number | null>(null);
   const [sheetDragging, setSheetDragging] = useState(false);
+  const [searchPlaceholderIndex, setSearchPlaceholderIndex] = useState(0);
 
   const abortRef = useRef<AbortController | null>(null);
   const bootedTokenRef = useRef<string | null>(null);
@@ -780,7 +763,10 @@ export default function Home() {
   const initials = useMemo(() => getInitials(displayName), [displayName]);
   const profileImageUrl = useMemo(() => getProfileImageUrl(user), [user]);
   const stats = useMemo(() => getExplrdStats(savedPlaces), [savedPlaces]);
-  const hierarchy = useMemo(() => getPlaceHierarchy(savedPlaces), [savedPlaces]);
+  const hierarchy = useMemo(
+    () => activeTab === "places" ? getPlaceHierarchy(savedPlaces) : null,
+    [activeTab, savedPlaces]
+  );
   const savedPlaceIds = useMemo(() => new Set(savedPlaces.map((place) => place.place_id)), [savedPlaces]);
   const selectedDisplay = useMemo(
     () => (selected ? getAddressSearchDisplay(selected.address, selected.display_name) : null),
@@ -1036,8 +1022,12 @@ export default function Home() {
     setSearching(false);
     abortRef.current?.abort();
     setSearchOpen(false);
-    pendingAddRestingResetRef.current = true;
     searchInputRef.current?.blur();
+    if (window.innerWidth >= 768) {
+      setSheetOffset(sheetSnaps.collapsed);
+    } else {
+      pendingAddRestingResetRef.current = true;
+    }
   }
 
   function clearSearchInput() {
@@ -1269,43 +1259,39 @@ export default function Home() {
     setSheetOffset(nextTab === "add" ? sheetSnaps.collapsed : sheetSnaps.mid);
   }
 
-  const mapViewportInsets = useMemo(
-    () => ({
-      topLeft: [20, 92] as [number, number],
-      bottomRight: [20, 320] as [number, number],
-    }),
-    []
-  );
 
   function requestRemoveCity(cityKey: string, cityName: string, placeIds: string[]) {
     setPendingDelete({ cityKey, cityName, placeIds });
   }
 
+  useEffect(() => {
+    if (activeTab !== "add") return;
+    const interval = setInterval(() => {
+      setSearchPlaceholderIndex((i) => (i + 1) % SEARCH_PLACEHOLDERS.length);
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [activeTab]);
+
+  useEffect(() => {
+    if (!sessionLoading && !bootLoading) return;
+    const interval = setInterval(() => {
+      setLoadingWordIndex((i) => (i + 1) % LOADING_PHRASES.length);
+    }, 1800);
+    return () => clearInterval(interval);
+  }, [sessionLoading, bootLoading]);
+
   if (sessionLoading || bootLoading) {
     return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[linear-gradient(160deg,_#f8fbff_0%,_#eef4ff_38%,_#f8f3ff_100%)] px-6">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute left-[-8%] top-[-4%] h-56 w-56 rounded-full bg-[#8cd8ff]/30 blur-3xl animate-pulse" />
-          <div className="absolute right-[-10%] top-[18%] h-72 w-72 rounded-full bg-[#d9b0ff]/28 blur-3xl animate-pulse [animation-delay:400ms]" />
-          <div className="absolute bottom-[-8%] left-[22%] h-64 w-64 rounded-full bg-[#ffe087]/24 blur-3xl animate-pulse [animation-delay:800ms]" />
-        </div>
-
-        <div className="relative w-full max-w-sm rounded-[32px] border border-white/70 bg-white/72 p-8 text-center shadow-[0_24px_90px_rgba(70,88,140,0.18)] backdrop-blur-2xl">
-          <div className="mx-auto flex h-20 w-20 items-center justify-center rounded-full border border-white/60 bg-[radial-gradient(circle_at_top_left,_rgba(255,255,255,0.5),_transparent_34%),linear-gradient(145deg,_#2a1a58_0%,_#111827_42%,_#0a0f1a_100%)] shadow-[0_18px_42px_rgba(17,18,20,0.22)]">
-            <div className="h-10 w-10 rounded-full border-4 border-white/18 border-t-white animate-spin" />
-          </div>
-          <div className="mt-6 text-[11px] font-bold uppercase tracking-[0.34em] text-[#7a84a1]">
-            Explrd
-          </div>
-          <div className="mt-2 text-3xl font-semibold tracking-[-0.05em] text-[#111214]">
-            Loading your world
-          </div>
-          <p className="mt-3 text-sm leading-6 text-[#6f7888]">
-            Pulling in your map, passport, and latest places.
-          </p>
-          <div className="mt-6 overflow-hidden rounded-full bg-white/70">
-            <div className="h-1.5 w-1/2 rounded-full bg-[linear-gradient(90deg,_#6fcfff_0%,_#d2a9ff_55%,_#ffd76d_100%)] animate-[pulse_1.4s_ease-in-out_infinite]" />
-          </div>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#fafbfc]">
+        <span className="text-[13px] font-semibold tracking-[0.22em] uppercase text-[#111214]">
+          Explrd
+        </span>
+        <p className="mt-5 text-sm text-[#868c94]">
+          {LOADING_PHRASES[loadingWordIndex]}
+          <span className="animate-pulse">...</span>
+        </p>
+        <div className="mt-5 w-24 overflow-hidden rounded-full bg-[#e1e4e8]">
+          <div className="h-[2px] w-full origin-left rounded-full bg-[#111214] animate-[shimmer_1.6s_ease-in-out_infinite]" />
         </div>
       </div>
     );
@@ -1335,7 +1321,7 @@ export default function Home() {
           containerClassName="h-full w-full"
           theme="light"
           focusStrategy="world"
-          viewportInsets={mapViewportInsets}
+          viewportInsets={MAP_VIEWPORT_INSETS}
           viewportResetKey={mapViewportResetKey}
         />
       </div>
@@ -1474,7 +1460,11 @@ export default function Home() {
                               onFocus={() => {
                                 setQuickAddedSpotlight(null);
                                 setSearchOpen(true);
-                                expandSheetFully();
+                                if (window.innerWidth >= 768) {
+                                  setSheetOffset(sheetSnaps.mid);
+                                } else {
+                                  expandSheetFully();
+                                }
                               }}
                               onKeyDown={(event) => {
                                 if (event.key === "Escape") {
@@ -1483,7 +1473,7 @@ export default function Home() {
                               }}
                               autoComplete="off"
                               enterKeyHint="search"
-                              placeholder="Search for a city"
+                              placeholder={SEARCH_PLACEHOLDERS[searchPlaceholderIndex]}
                               spellCheck={false}
                               className="w-full bg-transparent text-base text-[#111214] outline-none"
                             />
@@ -1717,7 +1707,7 @@ export default function Home() {
                           </div>
                         </div>
 
-                      {hierarchy.length === 0 ? (
+                      {!hierarchy || hierarchy.length === 0 ? (
                         <EmptyState
                           title="No places yet"
                           description="Once you add places, they will be organized by continent, country, state, and city here."

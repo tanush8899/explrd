@@ -20,10 +20,21 @@ export function parseBoundary(value: unknown): GeoFeatureCollection | null {
   return value as GeoFeatureCollection;
 }
 
-export async function hydratePlaceBoundaries(place: SavedPlace): Promise<SavedPlace> {
+export async function hydratePlaceBoundaries(
+  place: SavedPlace,
+  options?: { skipExternalFetch?: boolean }
+): Promise<SavedPlace> {
   const geography = getNormalizedPlace(place);
   const canonicalCountryBoundary = getStaticCountryFeatureCollection(geography.country);
   const canonicalContinentBoundary = getStaticContinentFeatureCollection(geography.continent);
+
+  if (options?.skipExternalFetch) {
+    return {
+      ...place,
+      country_boundary: canonicalCountryBoundary,
+      continent_boundary: canonicalContinentBoundary,
+    };
+  }
 
   const [cityBoundary, stateBoundary] = await Promise.all([
     place.city_boundary ||

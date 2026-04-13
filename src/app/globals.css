@@ -114,6 +114,12 @@ textarea::placeholder {
   animation: beacon-breathe 3.5s ease-in-out infinite;
 }
 
+@keyframes shimmer {
+  0% { transform: translateX(-100%); }
+  50% { transform: translateX(0%); }
+  100% { transform: translateX(100%); }
+}
+
 @keyframes beacon-breathe {
   0%, 100% {
     transform: scale(1);

@@ -90,32 +90,34 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const cityBoundary = city
-      ? await resolveBoundaryFeatureCollection({
-          mode: "city",
-          placeId: stablePlaceId,
-          lat: body.lat,
-          lng: body.lng,
-          city,
-          state,
-          country,
-          continent,
-          query: getBoundaryQuery({ city, state, country, continent }, "city"),
-        })
-      : null;
-    const stateBoundary = state
-      ? await resolveBoundaryFeatureCollection({
-          mode: "state",
-          placeId: stablePlaceId,
-          lat: body.lat,
-          lng: body.lng,
-          city,
-          state,
-          country,
-          continent,
-          query: getBoundaryQuery({ city, state, country, continent }, "state"),
-        })
-      : null;
+    const [cityBoundary, stateBoundary] = await Promise.all([
+      city
+        ? resolveBoundaryFeatureCollection({
+            mode: "city",
+            placeId: stablePlaceId,
+            lat: body.lat,
+            lng: body.lng,
+            city,
+            state,
+            country,
+            continent,
+            query: getBoundaryQuery({ city, state, country, continent }, "city"),
+          })
+        : Promise.resolve(null),
+      state
+        ? resolveBoundaryFeatureCollection({
+            mode: "state",
+            placeId: stablePlaceId,
+            lat: body.lat,
+            lng: body.lng,
+            city,
+            state,
+            country,
+            continent,
+            query: getBoundaryQuery({ city, state, country, continent }, "state"),
+          })
+        : Promise.resolve(null),
+    ]);
     const countryBoundary = getStaticCountryFeatureCollection(country);
     const continentBoundary = getStaticContinentFeatureCollection(continent);
 

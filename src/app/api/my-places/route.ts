@@ -177,7 +177,9 @@ export async function GET(req: Request) {
         country_boundary: parseBoundary(place.country_boundary),
         continent_boundary: parseBoundary(place.continent_boundary),
       }))
-      .map((place) => hydratePlaceBoundaries(place))
+      // Only hydrate static country/continent lookups — skip external API calls
+      // for missing city/state boundaries so the initial load is fast.
+      .map((place) => hydratePlaceBoundaries(place, { skipExternalFetch: true }))
     );
 
     return NextResponse.json({ places });

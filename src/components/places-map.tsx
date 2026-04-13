@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ComponentType, ReactNode } from "react";
 import L from "leaflet";
 import { GeoJSON, MapContainer, Marker, TileLayer, useMap, useMapEvents } from "react-leaflet";
@@ -58,6 +58,7 @@ const MapContainerCompat = MapContainer as unknown as ComponentType<{
   maxBounds?: BoundsTuple;
   maxBoundsViscosity?: number;
   worldCopyJump?: boolean;
+  minZoom?: number;
 }>;
 
 const GeoJSONCompat = GeoJSON as unknown as ComponentType<{
@@ -88,14 +89,12 @@ const MarkerCompat = Marker as unknown as ComponentType<{
   key?: string;
 }>;
 
-function createBeaconIcon(): L.DivIcon {
-  return L.divIcon({
-    className: "city-beacon-wrapper",
-    html: `<div class="city-beacon"><div class="city-beacon-core" style="background:#007AFF"></div></div>`,
-    iconSize: [20, 20],
-    iconAnchor: [10, 10],
-  });
-}
+const BEACON_ICON = L.divIcon({
+  className: "city-beacon-wrapper",
+  html: `<div class="city-beacon"><div class="city-beacon-core" style="background:#007AFF"></div></div>`,
+  iconSize: [20, 20],
+  iconAnchor: [10, 10],
+});
 
 const TILE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}";
 const TILE_ATTRIBUTION = 'Tiles &copy; <a href="https://www.esri.com/">Esri</a> &mdash; Source: Esri, DeLorme, NAVTEQ, USGS, Intermap, iPC, NRCAN, Esri Japan, METI, Esri China (Hong Kong), Esri (Thailand), TomTom, 2012';
@@ -476,6 +475,7 @@ export default function PlacesMap({
   const [mapReady, setMapReady] = useState(false);
   const [zoom, setZoom] = useState(2);
   const [layerMenuOpen, setLayerMenuOpen] = useState(false);
+  const handleZoomChange = useCallback((z: number) => setZoom(z), []);
   const [activeLayers, setActiveLayers] = useState<Array<"country" | "state" | "city">>(defaultLayerView);
   const previewSavedPlace = useMemo<SavedPlace | null>(() => {
     if (!previewPlace) return null;
@@ -599,6 +599,34 @@ export default function PlacesMap({
 
   void mapReady;
 
+  const countryStyle = useCallback(() => ({
+    color: theme === "dark" ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.4)",
+    fillColor: theme === "dark" ? "#2563eb" : "#3b82f6",
+    fillOpacity: showStateLayer || showCityLayer ? 0.3 : 0.42,
+    weight: 0.8,
+  }), [theme, showStateLayer, showCityLayer]);
+
+  const stateStyle = useCallback(() => ({
+    color: theme === "dark" ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.4)",
+    fillColor: theme === "dark" ? "#06b6d4" : "#14b8a6",
+    fillOpacity: showCountryLayer || showCityLayer ? 0.35 : 0.48,
+    weight: 0.8,
+  }), [theme, showCountryLayer, showCityLayer]);
+
+  const cityStyle = useCallback(() => ({
+    color: theme === "dark" ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.4)",
+    fillColor: theme === "dark" ? "#10b981" : "#14b8a6",
+    fillOpacity: 0.5,
+    weight: 0.8,
+  }), [theme]);
+
+  const previewStyle = useCallback(() => ({
+    color: "rgba(0,0,0,0.4)",
+    fillColor: "#f59e0b",
+    fillOpacity: 0.5,
+    weight: 0.8,
+  }), []);
+
   return (
     <div className={`relative ${heightClassName}`}>
       <div className="pointer-events-none absolute right-3 top-3 z-[500]">
@@ -647,11 +675,12 @@ export default function PlacesMap({
         maxBounds={WORLD_MAX_BOUNDS}
         maxBoundsViscosity={1}
         worldCopyJump={false}
+        minZoom={2}
       >
         <MapViewportController bounds={bounds} viewportInsets={viewportInsets} resetKey={viewportResetKey} />
         <MapBoundsGuard maxBounds={WORLD_MAX_BOUNDS} />
         <MapReadyReporter onReady={() => setMapReady(true)} />
-        <MapZoomReporter onZoomChange={setZoom} />
+        <MapZoomReporter onZoomChange={handleZoomChange} />
 
         <TileLayerCompat
           url={TILE_URL}
@@ -668,12 +697,7 @@ export default function PlacesMap({
                 data={overlay.featureCollection}
                 interactive={false}
                 smoothFactor={0}
-                style={() => ({
-                  color: theme === "dark" ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.4)",
-                  fillColor: theme === "dark" ? "#2563eb" : "#3b82f6",
-                  fillOpacity: showStateLayer || showCityLayer ? 0.3 : 0.42,
-                  weight: 0.8,
-                })}
+                style={countryStyle}
               />
             ))
           : null}
@@ -685,12 +709,7 @@ export default function PlacesMap({
                 data={overlay.featureCollection}
                 interactive={false}
                 smoothFactor={0}
-                style={() => ({
-                  color: theme === "dark" ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.4)",
-                  fillColor: theme === "dark" ? "#06b6d4" : "#14b8a6",
-                  fillOpacity: showCountryLayer || showCityLayer ? 0.35 : 0.48,
-                  weight: 0.8,
-                })}
+                style={stateStyle}
               />
             ))
           : null}
@@ -699,7 +718,7 @@ export default function PlacesMap({
           <MarkerCompat
             key={`city-marker-${city.id}`}
             position={[city.lat, city.lng]}
-            icon={createBeaconIcon()}
+            icon={BEACON_ICON}
             interactive={false}
           />
         )) : null}
@@ -708,7 +727,7 @@ export default function PlacesMap({
           <MarkerCompat
             key={`spotlight-city-marker-${spotlightPlace.place_id}`}
             position={[spotlightPlace.lat, spotlightPlace.lng]}
-            icon={createBeaconIcon()}
+            icon={BEACON_ICON}
             interactive={false}
           />
         ) : null}
@@ -720,12 +739,7 @@ export default function PlacesMap({
                 data={overlay.featureCollection}
                 interactive={false}
                 smoothFactor={0}
-                style={() => ({
-                  color: theme === "dark" ? "rgba(0,0,0,0.5)" : "rgba(0,0,0,0.4)",
-                  fillColor: theme === "dark" ? "#10b981" : "#14b8a6",
-                  fillOpacity: 0.5,
-                  weight: 0.8,
-                })}
+                style={cityStyle}
               />
             ))
           : null}
@@ -737,12 +751,7 @@ export default function PlacesMap({
                 data={overlay.featureCollection}
                 interactive={false}
                 smoothFactor={0}
-                style={() => ({
-                  color: "rgba(0,0,0,0.4)",
-                  fillColor: "#f59e0b",
-                  fillOpacity: 0.5,
-                  weight: 0.8,
-                })}
+                style={previewStyle}
               />
             ))
           : null}

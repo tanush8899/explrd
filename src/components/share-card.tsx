@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState, type CSSProperties, type RefObject } from "react";
+import { useEffect, useMemo, useState, type RefObject } from "react";
 import type { ExplrdStats } from "@/lib/stats";
 
 // ─── Passport Card ─────────────────────────────────────────────────────────
@@ -29,71 +29,17 @@ function useLandscapeCardLayout() {
   return landscape;
 }
 
-function useCardParallax() {
-  const frameRef = useRef<number | null>(null);
-  const [transformStyle, setTransformStyle] = useState<CSSProperties>({
-    transform: "perspective(1200px) rotateX(0deg) rotateY(0deg) scale(1)",
-  });
-
-  useEffect(() => {
-    function updateTransform(nextRotateX: number, nextRotateY: number) {
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      frameRef.current = requestAnimationFrame(() => {
-        setTransformStyle({
-          transform: `perspective(1200px) rotateX(${nextRotateX.toFixed(2)}deg) rotateY(${nextRotateY.toFixed(2)}deg) scale(1.01)`,
-        });
-      });
-    }
-
-    function resetTransform() {
-      updateTransform(0, 0);
-    }
-
-    function handleOrientation(event: DeviceOrientationEvent) {
-      const beta = typeof event.beta === "number" ? event.beta : 0;
-      const gamma = typeof event.gamma === "number" ? event.gamma : 0;
-      const rotateX = Math.max(-5, Math.min(5, (beta - 45) * -0.08));
-      const rotateY = Math.max(-7, Math.min(7, gamma * 0.18));
-      updateTransform(rotateX, rotateY);
-    }
-
-    window.addEventListener("deviceorientation", handleOrientation);
-    return () => {
-      window.removeEventListener("deviceorientation", handleOrientation);
-      if (frameRef.current) cancelAnimationFrame(frameRef.current);
-      resetTransform();
-    };
-  }, []);
-
-  function handlePointerMove(event: React.PointerEvent<HTMLDivElement>) {
-    const rect = event.currentTarget.getBoundingClientRect();
-    const x = (event.clientX - rect.left) / rect.width - 0.5;
-    const y = (event.clientY - rect.top) / rect.height - 0.5;
-    const rotateY = Math.max(-7, Math.min(7, x * 12));
-    const rotateX = Math.max(-5, Math.min(5, y * -10));
-
-    setTransformStyle({
-      transform: `perspective(1200px) rotateX(${rotateX.toFixed(2)}deg) rotateY(${rotateY.toFixed(2)}deg) scale(1.01)`,
-    });
-  }
-
-  function handlePointerLeave() {
-    setTransformStyle({
-      transform: "perspective(1200px) rotateX(0deg) rotateY(0deg) scale(1)",
-    });
-  }
-
-  return { transformStyle, handlePointerMove, handlePointerLeave };
-}
 
 export function PassportCard({ displayName, stats, cardRef }: PassportCardProps) {
   const landscape = useLandscapeCardLayout();
-  const { transformStyle, handlePointerMove, handlePointerLeave } = useCardParallax();
-  const today = new Date().toLocaleDateString("en-US", {
-    month: "long",
-    day: "numeric",
-    year: "numeric",
-  });
+  const [today, setToday] = useState("");
+  useEffect(() => {
+    setToday(new Date().toLocaleDateString("en-US", {
+      month: "long",
+      day: "numeric",
+      year: "numeric",
+    }));
+  }, []);
   const pct = stats.percentWorldTraveled.toFixed(1);
   const statsItems = useMemo(
     () => [
@@ -105,12 +51,7 @@ export function PassportCard({ displayName, stats, cardRef }: PassportCardProps)
   );
 
   return (
-    <div
-      className="transform-gpu [transform-style:preserve-3d]"
-      onPointerMove={handlePointerMove}
-      onPointerLeave={handlePointerLeave}
-      style={{ transition: "transform 180ms ease-out", ...transformStyle }}
-    >
+    <div>
       <div
         ref={cardRef}
         style={{ fontFamily: "system-ui, -apple-system, BlinkMacSystemFont, sans-serif" }}

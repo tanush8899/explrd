@@ -281,15 +281,16 @@ export default function PublicSharePage({ params }: { params: Promise<{ token: s
     setSheetDragging(false);
   }
 
-  const mapViewportInsets = useMemo(() => ({
-    topLeft: [20, 92] as [number, number],
-    bottomRight: [20, 320] as [number, number],
-  }), []);
-
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#fafbfc]">
-        <p className="text-sm font-medium text-[#868c94]">Loading map…</p>
+      <div className="flex min-h-screen flex-col items-center justify-center bg-[#fafbfc]">
+        <span className="text-[13px] font-semibold tracking-[0.22em] uppercase text-[#111214]">
+          Explrd
+        </span>
+        <p className="mt-5 text-sm text-[#868c94]">Loading map<span className="animate-pulse">...</span></p>
+        <div className="mt-5 w-24 overflow-hidden rounded-full bg-[#e1e4e8]">
+          <div className="h-[2px] w-full origin-left rounded-full bg-[#111214] animate-[shimmer_1.6s_ease-in-out_infinite]" />
+        </div>
       </div>
     );
   }
@@ -330,13 +331,13 @@ export default function PublicSharePage({ params }: { params: Promise<{ token: s
       <div className="absolute inset-0">
         <PlacesMap
           places={places}
-          mode="country"
+          mode="city"
           heightClassName="h-full"
           containerClassName="h-full w-full"
           theme="light"
           focusStrategy="data"
-          viewportInsets={mapViewportInsets}
-          defaultLayerView={["country"]}
+          viewportInsets={{ topLeft: [20, 92] as [number, number], bottomRight: [20, 320] as [number, number] }}
+          defaultLayerView={["city"]}
         />
       </div>
 
@@ -401,7 +402,6 @@ export default function PublicSharePage({ params }: { params: Promise<{ token: s
                       </div>
                     </div>
 
-                    {/* Hierarchy */}
                     {hierarchy.length === 0 ? (
                       <EmptyState
                         title="No places yet"
