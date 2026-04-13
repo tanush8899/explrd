@@ -2,7 +2,7 @@ import "./globals.css";
 import type { ReactNode } from "react";
 import type { Viewport } from "next";
 import "leaflet/dist/leaflet.css";
-import { Analytics } from "@vercel/analytics/next";
+import { Analytics } from "@vercel/analytics/react";
 
 export const metadata = {
   title: "Explrd",
