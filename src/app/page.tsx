@@ -725,7 +725,6 @@ export default function Home() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [mapViewportResetKey, setMapViewportResetKey] = useState(0);
-  const [shellHeight, setShellHeight] = useState(0);
   const [viewportHeight, setViewportHeight] = useState(0);
   const [keyboardOpen, setKeyboardOpen] = useState(false);
   const [sheetOffset, setSheetOffset] = useState<number | null>(null);
@@ -798,10 +797,6 @@ export default function Home() {
     function updateViewportHeight() {
       // visualViewport.height fires on iOS when keyboard opens; window.innerHeight does not
       const visualHeight = window.visualViewport?.height ?? window.innerHeight;
-      const layoutHeight = window.innerHeight;
-
-      // Shell always uses the full layout height so the map never jumps
-      setShellHeight((prev) => Math.max(prev, layoutHeight));
 
       // Track the max visual height seen (= no-keyboard state)
       if (!baseViewportHeightRef.current || visualHeight > baseViewportHeightRef.current) {
@@ -1307,10 +1302,8 @@ export default function Home() {
         ? "none"
         : "height 380ms cubic-bezier(0.32, 0.72, 0, 1)",
   } as const;
-  const appShellStyle = shellHeight ? { height: `${shellHeight}px` } : undefined;
-
   return (
-    <div className="relative overflow-hidden bg-[#fafbfc] text-[#111214]" style={appShellStyle}>
+    <div className="relative h-screen overflow-hidden bg-[#fafbfc] text-[#111214]" style={{ height: "100dvh" }}>
       <div className="absolute inset-0">
         <PlacesMap
           places={savedPlaces}
