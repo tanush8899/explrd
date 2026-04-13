@@ -1,8 +1,8 @@
 import "./globals.css";
 import type { ReactNode } from "react";
 import type { Viewport } from "next";
+import Script from "next/script";
 import "leaflet/dist/leaflet.css";
-import { Analytics } from "@vercel/analytics/react";
 
 export const metadata = {
   title: "Explrd",
@@ -26,7 +26,7 @@ export default function RootLayout({
     <html lang="en">
       <body>
         {children}
-        <Analytics />
+        <Script src="/_vercel/insights/script.js" strategy="afterInteractive" />
       </body>
     </html>
   );
