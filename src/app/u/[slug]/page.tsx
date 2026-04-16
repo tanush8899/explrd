@@ -88,7 +88,7 @@ export default function PublicProfilePage({
             href="/login"
             className="mt-6 inline-flex rounded-xl bg-[#111214] px-5 py-2.5 text-sm font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition hover:bg-[#2a2d31]"
           >
-            Open Explrd
+            Open Explr
           </Link>
         </div>
       </div>
@@ -103,7 +103,7 @@ export default function PublicProfilePage({
           <div className="rounded-xl border border-[#e1e4e8] bg-white p-6 shadow-[0_1px_2px_rgba(0,0,0,0.04)]">
             <div className="text-[11px] uppercase tracking-[0.14em] text-[#868c94]">Shared map</div>
             <h1 className="mt-3 text-3xl font-semibold leading-tight tracking-[-0.03em] text-[#111214]">
-              {profile.display_name || "Explrd Traveler"}
+              {profile.display_name || "Explr Traveler"}
             </h1>
             <div className="mt-2 text-sm text-[#868c94]">@{profile.public_slug}</div>
             <p className="mt-3 max-w-lg text-sm leading-6 text-[#868c94]">

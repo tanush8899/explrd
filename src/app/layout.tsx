@@ -5,7 +5,7 @@ import Script from "next/script";
 import "leaflet/dist/leaflet.css";
 
 export const metadata = {
-  title: "Explrd",
+  title: "Explr",
   description: "Track where you've explored, see your travel stats, and share your map.",
 };
 
