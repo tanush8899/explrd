@@ -14,7 +14,7 @@ export default function AppNav({ active }: AppNavProps) {
             Ex
           </div>
           <div>
-            <div className="text-base font-semibold tracking-tight text-slate-950">Explrd</div>
+            <div className="text-base font-semibold tracking-tight text-slate-950">Explr</div>
             <div className="text-xs text-slate-500">Travel map</div>
           </div>
         </div>

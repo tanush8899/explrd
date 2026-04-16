@@ -232,7 +232,7 @@ async function fetchBoundaryCandidates(url: URL) {
   const res = await fetch(url.toString(), {
     cache: "no-store",
     headers: {
-      "User-Agent": "Explrd/0.1 (tanushsanjay@gmail.com)",
+      "User-Agent": "Explr/0.1 (tanushsanjay@gmail.com)",
       "Accept-Language": "en",
     },
   });

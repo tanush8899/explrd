@@ -70,7 +70,7 @@ export function PassportCard({ displayName, stats, cardRef }: PassportCardProps)
         <div className="relative">
           <div className="flex items-center justify-between border-b border-white/10 px-5 py-3.5">
             <span className="text-[9px] font-bold uppercase tracking-[0.32em] text-white/78">
-              Explrd Passport
+              Explr Passport
             </span>
             <span className="text-[10px] font-medium tracking-[0.16em] text-white/65">
               {today}
@@ -126,7 +126,7 @@ export function PassportCard({ displayName, stats, cardRef }: PassportCardProps)
 
           <div className="flex items-center justify-between border-t border-white/10 px-5 py-3">
             <span className="text-[8px] font-bold uppercase tracking-[0.38em] text-white/45">
-              explrd
+              explr
             </span>
             <span className="text-[9px] tracking-[0.22em] text-white/45">Keep Exploring</span>
           </div>
@@ -162,13 +162,13 @@ export default function ShareCard({ profile, stats }: LegacyShareCardProps) {
       </div>
       <div className="relative flex items-center justify-between border-b border-white/10 px-5 py-3.5">
         <span className="text-[9px] font-bold uppercase tracking-[0.32em] text-white/78">
-          Explrd Passport
+          Explr Passport
         </span>
       </div>
       <div className="relative p-5">
         <div className="text-[9px] font-bold uppercase tracking-[0.26em] text-white/58">Explorer</div>
         <div className="mt-1.5 text-2xl font-semibold tracking-[-0.04em] text-white">
-          {profile.display_name?.trim() || "Explrd Traveler"}
+          {profile.display_name?.trim() || "Explr Traveler"}
         </div>
         <div className="my-4 h-px bg-white/10" />
         <div className="grid grid-cols-3 gap-3">

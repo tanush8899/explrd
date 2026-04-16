@@ -19,8 +19,8 @@ function normalizeSlug(value: string) {
 }
 
 function defaultDisplayName(email: string | null | undefined) {
-  if (!email) return "Explrd Traveler";
-  return email.split("@")[0] || "Explrd Traveler";
+  if (!email) return "Explr Traveler";
+  return email.split("@")[0] || "Explr Traveler";
 }
 
 async function getAuthedUser(req: Request) {

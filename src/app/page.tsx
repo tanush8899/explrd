@@ -18,12 +18,16 @@ import { PassportCard } from "@/components/share-card";
 
 type Address = Record<string, string | number | boolean | null | undefined>;
 
-const SEARCH_PLACEHOLDERS = [
-  "Add a city you've explored...",
-  "Where have you been?",
-  "Drop a pin on your travels...",
-  "Search a city or town...",
-  "What's your next stamp?",
+const SEARCH_SUFFIX_WORDS = [
+  "explored",
+  "discovered",
+  "been to",
+  "traveled to",
+  "trotted",
+  "visited",
+  "wandered through",
+  "adventured in",
+  "roamed",
 ];
 
 const LOADING_PHRASES = [
@@ -518,7 +522,7 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
     const dataUrl = await toPng(cardRef.current, { pixelRatio: 2 });
     const res = await fetch(dataUrl);
     const blob = await res.blob();
-    return new File([blob], "explrd-passport.png", { type: "image/png" });
+    return new File([blob], "explr-passport.png", { type: "image/png" });
   }, []);
 
 
@@ -532,7 +536,7 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
         try {
           await navigator.share({
             files: [file],
-            title: `${displayName}'s Explrd Passport`,
+            title: `${displayName}'s Explr Passport`,
           });
           return;
         } catch (err) {
@@ -546,7 +550,7 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
       const url = URL.createObjectURL(file);
       const a = document.createElement("a");
       a.href = url;
-      a.download = "explrd-passport.png";
+      a.download = "explr-passport.png";
       a.click();
       URL.revokeObjectURL(url);
     } finally {
@@ -597,6 +601,16 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
     }
   }
 
+  async function handleShareLink() {
+    if (!shareLink) return;
+    try {
+      await navigator.share({ url: shareLink, title: "My Explr Map" });
+    } catch {
+      // User cancelled or share not supported — fall back to copy
+      handleCopyLink();
+    }
+  }
+
   const expiryLabel = linkExpiry
     ? (() => {
         const diff = Math.ceil((new Date(linkExpiry).getTime() - Date.now()) / (1000 * 60 * 60 * 24));
@@ -618,7 +632,7 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
         >
           <div className="flex items-center gap-2.5">
             <PassportIcon />
-            <div className="text-sm font-semibold tracking-tight">Explrd Passport</div>
+            <div className="text-sm font-semibold tracking-tight">Explr Passport</div>
           </div>
         </button>
 
@@ -633,7 +647,7 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
         >
           <div className="flex items-center gap-2.5">
             <LinkIcon />
-            <div className="text-sm font-semibold tracking-tight">Share Link</div>
+            <div className="text-sm font-semibold tracking-tight">Explr Link</div>
           </div>
         </button>
       </div>
@@ -663,13 +677,20 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
                 <span className="flex-1 truncate font-mono text-[11px] text-[#4d5560]">{shareLink}</span>
                 {expiryLabel ? <span className="shrink-0 text-[10px] text-[#9ca1a8]">{expiryLabel}</span> : null}
               </div>
-              <div className="grid grid-cols-2 gap-2.5">
+              <div className="grid grid-cols-3 gap-2.5">
+                <button
+                  type="button"
+                  onClick={handleShareLink}
+                  className="rounded-[18px] bg-[#111214] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#2a2d31]"
+                >
+                  Share
+                </button>
                 <button
                   type="button"
                   onClick={handleCopyLink}
-                  className="rounded-[18px] bg-[#111214] px-4 py-3 text-sm font-semibold text-white transition hover:bg-[#2a2d31]"
+                  className="rounded-[18px] bg-white px-4 py-3 text-sm font-semibold text-[#111214] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#f0f1f3]"
                 >
-                  {copied === "link" ? "Copied!" : "Copy Link"}
+                  {copied === "link" ? "Copied!" : "Copy"}
                 </button>
                 <button
                   type="button"
@@ -677,7 +698,7 @@ function ShareTab({ displayName, stats, session }: ShareTabProps) {
                   disabled={generatingLink}
                   className="rounded-[18px] bg-white px-4 py-3 text-sm font-semibold text-[#111214] shadow-[0_1px_3px_rgba(0,0,0,0.06)] transition hover:bg-[#f0f1f3] disabled:opacity-50"
                 >
-                  {generatingLink ? "Refreshing…" : "New Link"}
+                  {generatingLink ? "…" : "New"}
                 </button>
               </div>
             </div>
@@ -1262,8 +1283,8 @@ export default function Home() {
   useEffect(() => {
     if (activeTab !== "add") return;
     const interval = setInterval(() => {
-      setSearchPlaceholderIndex((i) => (i + 1) % SEARCH_PLACEHOLDERS.length);
-    }, 3000);
+      setSearchPlaceholderIndex((i) => (i + 1) % SEARCH_SUFFIX_WORDS.length);
+    }, 2800);
     return () => clearInterval(interval);
   }, [activeTab]);
 
@@ -1279,7 +1300,7 @@ export default function Home() {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#fafbfc]">
         <span className="text-[13px] font-semibold tracking-[0.22em] uppercase text-[#111214]">
-          Explrd
+          Explr
         </span>
         <p className="mt-5 text-sm text-[#868c94]">
           {LOADING_PHRASES[loadingWordIndex]}
@@ -1439,37 +1460,49 @@ export default function Home() {
                             <span className="text-[#6f767d]">
                               <SearchIcon />
                             </span>
-                            <input
-                              ref={searchInputRef}
-                              value={q}
-                              onChange={(event) => {
-                                setQ(event.target.value);
-                                setResults([]);
-                                setSelected(null);
-                                setQuickAddedSpotlight(null);
-                                setSaveMsg(null);
-                                setSearchOpen(true);
-                              }}
-                              onFocus={() => {
-                                setQuickAddedSpotlight(null);
-                                setSearchOpen(true);
-                                if (window.innerWidth >= 768) {
-                                  setSheetOffset(sheetSnaps.mid);
-                                } else {
-                                  expandSheetFully();
-                                }
-                              }}
-                              onKeyDown={(event) => {
-                                if (event.key === "Escape") {
-                                  dismissSearchExperience();
-                                }
-                              }}
-                              autoComplete="off"
-                              enterKeyHint="search"
-                              placeholder={SEARCH_PLACEHOLDERS[searchPlaceholderIndex]}
-                              spellCheck={false}
-                              className="w-full bg-transparent text-base text-[#111214] outline-none"
-                            />
+                            <div className="relative min-w-0 flex-1">
+                              <input
+                                ref={searchInputRef}
+                                value={q}
+                                onChange={(event) => {
+                                  setQ(event.target.value);
+                                  setResults([]);
+                                  setSelected(null);
+                                  setQuickAddedSpotlight(null);
+                                  setSaveMsg(null);
+                                  setSearchOpen(true);
+                                }}
+                                onFocus={() => {
+                                  setQuickAddedSpotlight(null);
+                                  setSearchOpen(true);
+                                  if (window.innerWidth >= 768) {
+                                    setSheetOffset(sheetSnaps.mid);
+                                  } else {
+                                    expandSheetFully();
+                                  }
+                                }}
+                                onKeyDown={(event) => {
+                                  if (event.key === "Escape") {
+                                    dismissSearchExperience();
+                                  }
+                                }}
+                                autoComplete="off"
+                                enterKeyHint="search"
+                                placeholder=""
+                                spellCheck={false}
+                                className="w-full bg-transparent text-base text-[#111214] outline-none"
+                              />
+                              {!q && (
+                                <div className="pointer-events-none absolute inset-0 flex items-center overflow-hidden">
+                                  <span className="whitespace-nowrap text-base text-[#b0b5bb]">
+                                    Add a city you&apos;ve{" "}
+                                    <span key={searchPlaceholderIndex} className="search-suffix">
+                                      {SEARCH_SUFFIX_WORDS[searchPlaceholderIndex]}
+                                    </span>
+                                  </span>
+                                </div>
+                              )}
+                            </div>
                             {q ? (
                               <button
                                 type="button"

@@ -83,7 +83,7 @@ export default function LoginPage() {
   if (loading) {
     return (
       <div className="h-screen overflow-hidden flex items-center justify-center bg-[#fafbfc]" style={{ height: "100dvh" }}>
-        <span className="text-[13px] font-semibold tracking-[0.22em] uppercase text-[#111214]">Explrd</span>
+        <span className="text-[13px] font-semibold tracking-[0.22em] uppercase text-[#111214]">Explr</span>
       </div>
     );
   }
@@ -96,7 +96,7 @@ export default function LoginPage() {
       {/* Wordmark */}
       <div className="mb-8 text-center">
         <span className="text-[13px] font-semibold tracking-[0.22em] uppercase text-[#111214]">
-          Explrd
+          Explr
         </span>
       </div>
 
@@ -198,7 +198,7 @@ export default function LoginPage() {
       <p className="mt-5 text-[13px] text-[#868c94]">
         {mode === "login" ? (
           <>
-            New to Explrd?{" "}
+            New to Explr?{" "}
             <button
               type="button"
               onClick={() => { setMode("signup"); setError(null); }}

@@ -285,7 +285,7 @@ export default function PublicSharePage({ params }: { params: Promise<{ token: s
     return (
       <div className="flex min-h-screen flex-col items-center justify-center bg-[#fafbfc]">
         <span className="text-[13px] font-semibold tracking-[0.22em] uppercase text-[#111214]">
-          Explrd
+          Explr
         </span>
         <p className="mt-5 text-sm text-[#868c94]">Loading map<span className="animate-pulse">...</span></p>
         <div className="mt-5 w-24 overflow-hidden rounded-full bg-[#e1e4e8]">
@@ -311,7 +311,7 @@ export default function PublicSharePage({ params }: { params: Promise<{ token: s
           href="/login"
           className="rounded-xl bg-[#111214] px-5 py-2.5 text-sm font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition hover:bg-[#2a2d31]"
         >
-          Open Explrd
+          Open Explr
         </Link>
       </div>
     );
@@ -368,7 +368,7 @@ export default function PublicSharePage({ params }: { params: Promise<{ token: s
                       onPointerDown={(e) => e.stopPropagation()}
                       className="shrink-0 rounded-full border border-[#e1e4e8] bg-white px-3.5 py-1.5 text-[12px] font-medium text-[#111214] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:bg-[#f6f7f8]"
                     >
-                      Open Explrd →
+                      Open Explr →
                     </Link>
                   </div>
                 </div>
@@ -384,7 +384,7 @@ export default function PublicSharePage({ params }: { params: Promise<{ token: s
                     <div className="overflow-hidden rounded-[28px] bg-[#0d1117]">
                       <div className="p-5">
                         <div className="text-[10px] font-bold uppercase tracking-[0.26em] text-[#3a4d66]">
-                          Explrd Passport
+                          Explr Passport
                         </div>
                         <div className="mt-5 grid grid-cols-2 gap-x-6 gap-y-5">
                           {[

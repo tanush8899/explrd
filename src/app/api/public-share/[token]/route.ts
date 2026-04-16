@@ -58,7 +58,7 @@ export async function GET(_: Request, context: RouteContext) {
       profileRow?.display_name?.trim() ||
       metaName?.trim() ||
       authUser?.email?.split("@")[0] ||
-      "Explrd Traveler";
+      "Explr Traveler";
 
     // Fetch places
     let { data, error } = await supabase
