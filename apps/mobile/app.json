@@ -1,0 +1,52 @@
+{
+  "expo": {
+    "name": "Explr",
+    "slug": "explrd",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "scheme": "explrd",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#fafbfc"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.explrd.app",
+      "infoPlist": {
+        "NSPhotoLibraryAddUsageDescription": "Explr saves your passport card to Photos.",
+        "NSPhotoLibraryUsageDescription": "Explr saves your passport card to Photos."
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#fafbfc"
+      },
+      "package": "com.explrd.app"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#fafbfc",
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 200
+        }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Explr saves your passport card to your photo library."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    }
+  }
+}
