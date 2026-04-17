@@ -10,5 +10,8 @@
     "dev:web": "npm run dev --workspace=apps/web",
     "build:web": "npm run build --workspace=apps/web",
     "dev:mobile": "npm run start --workspace=apps/mobile"
+  },
+  "dependencies": {
+    "tailwindcss": "3.4.17"
   }
 }
