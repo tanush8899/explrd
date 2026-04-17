@@ -17,6 +17,7 @@ import { fetchMyPlaces, deletePin } from "@/lib/api";
 import AddPlacePanel from "@/components/BottomSheet/AddPlacePanel";
 import MyPlacesPanel from "@/components/BottomSheet/MyPlacesPanel";
 import SharePanel from "@/components/BottomSheet/SharePanel";
+import PlacesMap from "@/components/PlacesMap";
 import type { SavedPlace } from "@explrd/shared";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
@@ -127,29 +128,23 @@ export default function MainScreen() {
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
     <View style={StyleSheet.absoluteFillObject}>
-      {/* ── Map placeholder (replaced in Chunk 3) ─────────────────────────── */}
-      <View style={styles.mapPlaceholder}>
-        {loadingPlaces ? (
-          <ActivityIndicator size="large" color="#868c94" />
-        ) : (
-          <View style={styles.placeholderContent}>
-            <Text style={styles.placeholderTitle}>Explr</Text>
-            <Text style={styles.placeholderSub}>
-              {places.length === 0
-                ? "Add your first place below"
-                : `${places.length} place${places.length === 1 ? "" : "s"} saved`}
-            </Text>
-          </View>
-        )}
+      {/* ── Map ───────────────────────────────────────────────────────────── */}
+      <PlacesMap places={places} />
 
-        {/* Sign-out pill */}
-        <TouchableOpacity
-          onPress={signOut}
-          style={[styles.signOutBtn, { top: insets.top + 12 }]}
-        >
-          <Text style={styles.signOutText}>Sign out</Text>
-        </TouchableOpacity>
-      </View>
+      {/* Loading overlay — shown until first fetch completes */}
+      {loadingPlaces && (
+        <View style={styles.loadingOverlay} pointerEvents="none">
+          <ActivityIndicator size="large" color="#868c94" />
+        </View>
+      )}
+
+      {/* Sign-out pill — floats above the map */}
+      <TouchableOpacity
+        onPress={signOut}
+        style={[styles.signOutBtn, { top: insets.top + 12 }]}
+      >
+        <Text style={styles.signOutText}>Sign out</Text>
+      </TouchableOpacity>
 
       {/* ── Bottom sheet ──────────────────────────────────────────────────── */}
       <BottomSheet
@@ -208,20 +203,12 @@ export default function MainScreen() {
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  mapPlaceholder: {
-    flex: 1,
-    backgroundColor: "#e8eaed",
+  loadingOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    backgroundColor: "rgba(232,234,237,0.7)",
     alignItems: "center",
     justifyContent: "center",
   },
-  placeholderContent: { alignItems: "center", gap: 8 },
-  placeholderTitle: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#111214",
-    letterSpacing: -0.5,
-  },
-  placeholderSub: { fontSize: 14, color: "#868c94" },
 
   signOutBtn: {
     position: "absolute",

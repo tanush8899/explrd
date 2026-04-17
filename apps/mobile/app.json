@@ -19,6 +19,7 @@
       "infoPlist": {
         "NSPhotoLibraryAddUsageDescription": "Explr saves your passport card to Photos.",
         "NSPhotoLibraryUsageDescription": "Explr saves your passport card to Photos.",
+        "NSLocationWhenInUseUsageDescription": "Explr shows your saved places on the map.",
         "ITSAppUsesNonExemptEncryption": false
       }
     },
@@ -39,6 +40,7 @@
     },
     "plugins": [
       "expo-router",
+      "react-native-maps",
       [
         "expo-splash-screen",
         {
