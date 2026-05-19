@@ -30,14 +30,21 @@ const TABS: Array<{ key: Tab; label: string }> = [
   { key: "share", label: "Share" },
 ];
 
-// snap indices: 0 = 30%, 1 = 55%, 2 = 95%
-const SNAP_POINTS = ["30%", "55%", "95%"];
+// Three snap states mirroring the Flighty-style floating sheet:
+//   0 → peek: large title header visible, tab bar peeking
+//   1 → mid:  header + tab bar + first section of content
+//   2 → full: near-full-screen scrollable content
+const SNAP_POINTS = [180, "52%", "90%"] as const;
 const TAB_SNAP: Record<Tab, number> = { add: 0, places: 1, share: 1 };
+
+// Gap between the sheet and the screen edges (floating look)
+const SHEET_HORIZONTAL_MARGIN = 12;
+const SHEET_BOTTOM_INSET = 16;
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function MainScreen() {
-  const { session } = useSession();
+  const { session, user } = useSession();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheet>(null);
 
@@ -46,7 +53,13 @@ export default function MainScreen() {
   const [activeTab, setActiveTab] = useState<Tab>("places");
   const [deletingId, setDeletingId] = useState<string | null>(null);
 
-  const snapPoints = useMemo(() => SNAP_POINTS, []);
+  const snapPoints = useMemo(() => [...SNAP_POINTS], []);
+
+  // Derive avatar initials from email (e.g. "tanush@..." → "T")
+  const avatarInitials = useMemo(() => {
+    const email = user?.email ?? "";
+    return email.slice(0, 2).toUpperCase() || "ME";
+  }, [user?.email]);
 
   // ── Load places ─────────────────────────────────────────────────────────────
   const loadPlaces = useCallback(async () => {
@@ -71,7 +84,7 @@ export default function MainScreen() {
     sheetRef.current?.snapToIndex(TAB_SNAP[tab]);
   };
 
-  // Expand to 95% when search is focused
+  // Expand to full when search is focused
   const handleSearchFocus = useCallback(
     () => sheetRef.current?.snapToIndex(2),
     []
@@ -89,7 +102,6 @@ export default function MainScreen() {
           ? prev
           : [optimistic, ...prev]
       );
-      // Re-fetch in background to get fully-normalised data from the server
       loadPlaces();
     },
     [loadPlaces]
@@ -131,32 +143,49 @@ export default function MainScreen() {
       {/* ── Map ───────────────────────────────────────────────────────────── */}
       <PlacesMap places={places} />
 
-      {/* Loading overlay — shown until first fetch completes */}
+      {/* Loading overlay */}
       {loadingPlaces && (
         <View style={styles.loadingOverlay} pointerEvents="none">
           <ActivityIndicator size="large" color="#868c94" />
         </View>
       )}
 
-      {/* Sign-out pill — floats above the map */}
-      <TouchableOpacity
-        onPress={signOut}
-        style={[styles.signOutBtn, { top: insets.top + 12 }]}
-      >
-        <Text style={styles.signOutText}>Sign out</Text>
-      </TouchableOpacity>
-
-      {/* ── Bottom sheet ──────────────────────────────────────────────────── */}
+      {/* ── Floating bottom sheet ──────────────────────────────────────────── */}
       <BottomSheet
         ref={sheetRef}
         index={1}
         snapPoints={snapPoints}
         enablePanDownToClose={false}
-        backdropComponent={renderBackdrop}
-        handleIndicatorStyle={styles.sheetHandle}
+        // ── Floating / detached appearance ──────────────────────────────────
+        detached
+        bottomInset={SHEET_BOTTOM_INSET + insets.bottom}
+        style={styles.sheetOuter}
         backgroundStyle={styles.sheetBackground}
+        handleIndicatorStyle={styles.sheetHandle}
+        backdropComponent={renderBackdrop}
+        // Smooth spring animation
+        animateOnMount
       >
-        {/* Tab bar — fixed, non-scrollable header */}
+        {/* ── Large-title header (always visible) ───────────────────────── */}
+        <BottomSheetView style={[styles.sheetHeader, { paddingTop: 8 }]}>
+          <Text style={styles.sheetTitle}>My Places</Text>
+          <View style={styles.headerActions}>
+            {/* Share icon */}
+            <TouchableOpacity style={styles.iconBtn} activeOpacity={0.7}>
+              <Text style={styles.iconBtnText}>↑</Text>
+            </TouchableOpacity>
+            {/* Avatar — tap to sign out */}
+            <TouchableOpacity
+              onPress={signOut}
+              style={styles.avatarCircle}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.avatarText}>{avatarInitials}</Text>
+            </TouchableOpacity>
+          </View>
+        </BottomSheetView>
+
+        {/* ── Tab bar ───────────────────────────────────────────────────── */}
         <BottomSheetView style={styles.tabBar}>
           {TABS.map((tab) => (
             <TouchableOpacity
@@ -179,7 +208,7 @@ export default function MainScreen() {
           ))}
         </BottomSheetView>
 
-        {/* Panel — each manages its own BottomSheetScrollView internally */}
+        {/* ── Panel content ─────────────────────────────────────────────── */}
         {activeTab === "add" && (
           <AddPlacePanel
             onSaved={handleSaved}
@@ -210,28 +239,76 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
 
-  signOutBtn: {
-    position: "absolute",
-    right: 16,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+  // ── Floating sheet ────────────────────────────────────────────────────────
+  sheetOuter: {
+    marginHorizontal: SHEET_HORIZONTAL_MARGIN,
   },
-  signOutText: { fontSize: 12, fontWeight: "500", color: "#111214" },
+  sheetBackground: {
+    backgroundColor: "#ffffff",
+    borderRadius: 24,
+    // Shadow so the sheet lifts off the map
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 16,
+    elevation: 8,
+  },
+  sheetHandle: {
+    backgroundColor: "#d1d5db",
+    width: 36,
+  },
 
-  sheetHandle: { backgroundColor: "#d1d5db" },
-  sheetBackground: { backgroundColor: "#ffffff" },
+  // ── Sheet header ─────────────────────────────────────────────────────────
+  sheetHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingBottom: 12,
+  },
+  sheetTitle: {
+    fontSize: 28,
+    fontWeight: "700",
+    color: "#111214",
+    letterSpacing: -0.5,
+  },
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+  },
+  iconBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f0f1f2",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  iconBtnText: {
+    fontSize: 16,
+    color: "#111214",
+    fontWeight: "600",
+  },
+  avatarCircle: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#c9a84c",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#ffffff",
+    letterSpacing: 0.3,
+  },
 
+  // ── Tab bar ───────────────────────────────────────────────────────────────
   tabBar: {
     flexDirection: "row",
     paddingHorizontal: 16,
-    paddingTop: 4,
     paddingBottom: 12,
     gap: 8,
     borderBottomWidth: 1,
