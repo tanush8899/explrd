@@ -40,7 +40,6 @@ export const updatePassword = (password: string) =>
  */
 export async function signInWithGoogleNative() {
   const redirectUri = makeRedirectUri({
-    scheme: "explrd",
     path: "auth/callback",
   });
 
