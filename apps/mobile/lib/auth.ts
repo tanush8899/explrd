@@ -1,6 +1,12 @@
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
-import { signUpWithEmail as _signUp, signInWithEmail as _signIn, signOut as _signOut } from "@explrd/shared";
+import {
+  signUpWithEmail as _signUp,
+  signInWithEmail as _signIn,
+  signOut as _signOut,
+  resetPasswordForEmail as _resetPassword,
+  updatePassword as _updatePassword,
+} from "@explrd/shared";
 import { supabase } from "./supabaseClient";
 
 // Required: dismisses the in-app browser tab when auth completes
@@ -14,6 +20,14 @@ export const signInWithEmail = (email: string, password: string) =>
   _signIn(supabase, email, password);
 
 export const signOut = () => _signOut(supabase);
+
+export function sendPasswordReset(email: string) {
+  const redirectTo = makeRedirectUri({ path: "auth/callback" });
+  return _resetPassword(supabase, email, redirectTo);
+}
+
+export const updatePassword = (password: string) =>
+  _updatePassword(supabase, password);
 
 /**
  * Google OAuth for native iOS via expo-web-browser.
