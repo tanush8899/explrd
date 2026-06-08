@@ -1,5 +1,6 @@
 import * as WebBrowser from "expo-web-browser";
 import { makeRedirectUri } from "expo-auth-session";
+import Constants from "expo-constants";
 import {
   signUpWithEmail as _signUp,
   signInWithEmail as _signIn,
@@ -12,6 +13,15 @@ import { supabase } from "./supabaseClient";
 // Required: dismisses the in-app browser tab when auth completes
 WebBrowser.maybeCompleteAuthSession();
 
+function appScheme(): string {
+  const s = Constants.expoConfig?.scheme;
+  return (Array.isArray(s) ? s[0] : s) ?? "explrd";
+}
+
+function authRedirectUri() {
+  return makeRedirectUri({ scheme: appScheme(), path: "auth/callback" });
+}
+
 // Bind email fns to this platform's supabase client
 export const signUpWithEmail = (email: string, password: string) =>
   _signUp(supabase, email, password);
@@ -22,8 +32,7 @@ export const signInWithEmail = (email: string, password: string) =>
 export const signOut = () => _signOut(supabase);
 
 export function sendPasswordReset(email: string) {
-  const redirectTo = makeRedirectUri({ path: "auth/callback" });
-  return _resetPassword(supabase, email, redirectTo);
+  return _resetPassword(supabase, email, authRedirectUri());
 }
 
 export const updatePassword = (password: string) =>
@@ -39,9 +48,7 @@ export const updatePassword = (password: string) =>
  *   2. Supabase Dashboard → Auth → Redirect URLs: add explrd://auth/callback
  */
 export async function signInWithGoogleNative() {
-  const redirectUri = makeRedirectUri({
-    path: "auth/callback",
-  });
+  const redirectUri = authRedirectUri();
 
   const { data, error } = await supabase.auth.signInWithOAuth({
     provider: "google",
