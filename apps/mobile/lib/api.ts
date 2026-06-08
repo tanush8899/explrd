@@ -20,6 +20,7 @@ export type GeoResult = {
   type: string | null;
   class: string | null;
   addresstype: string | null;
+  landmark_name: string | null;
 };
 
 /** GET /api/geocode?q= — no auth required */
