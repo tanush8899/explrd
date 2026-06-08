@@ -127,7 +127,7 @@ export default function AddPlacePanel({
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
-          placeholder="Search city, country…"
+          placeholder="Search city, landmark, university, park…"
           placeholderTextColor="#868c94"
           value={query}
           onChangeText={handleSearch}
@@ -203,6 +203,11 @@ export default function AddPlacePanel({
                     {secondary}
                   </Text>
                 ) : null}
+                {item.landmark_name ? (
+                  <Text style={styles.resultLandmark} numberOfLines={1}>
+                    Near {item.landmark_name}
+                  </Text>
+                ) : null}
               </TouchableOpacity>
             );
           })}
@@ -220,7 +225,7 @@ export default function AddPlacePanel({
       {!selected && query.length === 0 && (
         <View style={styles.hintBox}>
           <Text style={styles.hintText}>
-            Type a city or country name to search. Only city-level results can be saved.
+            Search by city, country, landmark, university, or national park. We'll find the nearest city for you.
           </Text>
         </View>
       )}
@@ -343,6 +348,12 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: "#868c94",
     marginTop: 2,
+  },
+  resultLandmark: {
+    fontSize: 11,
+    color: "#a0a7b0",
+    marginTop: 2,
+    fontStyle: "italic",
   },
   emptyState: {
     marginTop: 32,
