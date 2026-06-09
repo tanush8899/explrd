@@ -103,20 +103,19 @@ type NominatimItem = {
   address: Record<string, string | undefined>;
 };
 
-const CITY_ADDR_TYPES = new Set([
-  "city", "town", "village", "hamlet", "municipality",
-  "borough", "suburb", "quarter", "neighbourhood", "neighborhood",
-  "district", "city_district", "county", "locality", "island",
+// Only genuine city-level admin units; everything finer resolves up to parent city
+const STRICT_CITY_TYPES = new Set([
+  "city", "town", "village", "hamlet", "municipality", "borough",
 ]);
 
-function nominatimCity(addr: Record<string, string | undefined>): string | undefined {
+function nominatimAddrCity(addr: Record<string, string | undefined>): string | undefined {
   return (
     addr.city ?? addr.town ?? addr.village ??
     addr.municipality ?? addr.borough ?? addr.hamlet
   );
 }
 
-/** Search Nominatim directly; POIs are resolved to their parent city. */
+/** Search Nominatim directly. Every result is resolved to a city. */
 export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
   const url =
     `https://nominatim.openstreetmap.org/search` +
@@ -134,47 +133,35 @@ export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise
 
   for (const r of data) {
     const addr = r.address;
-    const city = nominatimCity(addr);
     const state = addr.state;
     const country = addr.country;
     const countryCode = addr.country_code?.toUpperCase();
-    const isCity = CITY_ADDR_TYPES.has((r.addresstype ?? "").toLowerCase());
+    const isStrictCity = STRICT_CITY_TYPES.has((r.addresstype ?? "").toLowerCase());
 
-    if (isCity) {
-      const resolvedCity = r.display_name.split(",")[0].trim();
-      const key = `${resolvedCity.toLowerCase()}|${state?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      out.push({
-        place_id: `nom:${r.place_id}`,
-        display_name: [resolvedCity, state, country].filter(Boolean).join(", "),
-        lat: parseFloat(r.lat),
-        lng: parseFloat(r.lon),
-        address: { city: resolvedCity, state, country, country_code: countryCode },
-        type: r.type ?? null,
-        class: r.class ?? null,
-        addresstype: r.addresstype ?? null,
-        landmark_name: null,
-      });
-    } else if (city) {
-      // POI/landmark — surface its parent city instead
-      const key = `${city.toLowerCase()}|${state?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      // Keep the landmark name (e.g. "Penn State University") as context
-      const landmarkName = r.display_name.split(",")[0].trim();
-      out.push({
-        place_id: `nom:city:${key.replace(/\|/g, ":")}`,
-        display_name: [city, state, country].filter(Boolean).join(", "),
-        lat: parseFloat(r.lat),
-        lng: parseFloat(r.lon),
-        address: { city, state, country, country_code: countryCode },
-        type: "city",
-        class: "place",
-        addresstype: "city",
-        landmark_name: landmarkName !== city ? landmarkName : null,
-      });
-    }
+    // City → use its own name; anything finer → resolve to parent city
+    const resolvedCity = isStrictCity
+      ? r.display_name.split(",")[0].trim()
+      : nominatimAddrCity(addr);
+    if (!resolvedCity) continue;
+
+    const key = `${resolvedCity.toLowerCase()}|${state?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const rawName = r.display_name.split(",")[0].trim();
+    out.push({
+      place_id: isStrictCity
+        ? `nom:${r.place_id}`
+        : `nom:city:${key.replace(/\|/g, ":")}`,
+      display_name: [resolvedCity, state, country].filter(Boolean).join(", "),
+      lat: parseFloat(r.lat),
+      lng: parseFloat(r.lon),
+      address: { city: resolvedCity, state, country, country_code: countryCode },
+      type: isStrictCity ? (r.type ?? null) : "city",
+      class: isStrictCity ? (r.class ?? null) : "place",
+      addresstype: isStrictCity ? (r.addresstype ?? null) : "city",
+      landmark_name: !isStrictCity && rawName !== resolvedCity ? rawName : null,
+    });
   }
   return out;
 }
@@ -188,11 +175,27 @@ function cityDedupKey(r: GeoResult): string {
   return [city, state, country].map((s) => s.toLowerCase().trim()).join("|");
 }
 
+/** Normalize a Geoapify result to clean "City, State, Country" format. */
+function normalizeGeoapifyResult(r: GeoResult): GeoResult | null {
+  const city =
+    (r.address.city as string | undefined) ??
+    (r.address.town as string | undefined) ??
+    (r.address.village as string | undefined) ??
+    r.display_name.split(",")[0].trim();
+  const state = r.address.state as string | undefined;
+  const country = r.address.country as string | undefined;
+  if (!city) return null;
+  return {
+    ...r,
+    display_name: [city, state, country].filter(Boolean).join(", "),
+  };
+}
+
 /**
- * Combined city/landmark search.
- * Primary results come from the Geoapify backend; Nominatim supplements with
- * any landmark → city resolutions that Geoapify missed (e.g. "Penn State",
- * "Big Bend", "Cape May").
+ * Combined city search. Geoapify (via backend) and Nominatim run in parallel.
+ * All results are normalized to "City, State, Country" and deduplicated.
+ * Any POI/sub-city input (neighbourhood, university, park…) resolves up to
+ * its parent city — the dropdown only ever shows cities.
  */
 export async function searchPlaces(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
   const [geoapifyRes, nominatimRes] = await Promise.allSettled([
@@ -200,15 +203,20 @@ export async function searchPlaces(q: string, signal?: AbortSignal): Promise<Geo
     nominatimGeocode(q, signal),
   ]);
 
-  // Propagate abort so the caller's catch block can suppress UI updates
   if (signal?.aborted) {
     const err = new Error("AbortError");
     err.name = "AbortError";
     throw err;
   }
 
-  const primary = geoapifyRes.status === "fulfilled" ? geoapifyRes.value : [];
+  const rawPrimary = geoapifyRes.status === "fulfilled" ? geoapifyRes.value : [];
   const supplement = nominatimRes.status === "fulfilled" ? nominatimRes.value : [];
+
+  // Normalize Geoapify results to "City, State, Country" and drop anything
+  // that can't resolve to a city
+  const primary = rawPrimary
+    .map(normalizeGeoapifyResult)
+    .filter((r): r is GeoResult => r !== null);
 
   const seen = new Set(primary.map(cityDedupKey));
   const merged = [
