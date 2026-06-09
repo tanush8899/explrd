@@ -144,7 +144,9 @@ export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise
       : nominatimAddrCity(addr);
     if (!resolvedCity) continue;
 
-    const key = `${resolvedCity.toLowerCase()}|${state?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
+    // Strip bilingual slash-names (e.g. "Valais/Wallis" → "Valais")
+    const cleanState = state?.split("/")[0].trim();
+    const key = `${resolvedCity.toLowerCase()}|${cleanState?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -153,10 +155,10 @@ export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise
       place_id: isStrictCity
         ? `nom:${r.place_id}`
         : `nom:city:${key.replace(/\|/g, ":")}`,
-      display_name: [resolvedCity, state, country].filter(Boolean).join(", "),
+      display_name: [resolvedCity, cleanState, country].filter(Boolean).join(", "),
       lat: parseFloat(r.lat),
       lng: parseFloat(r.lon),
-      address: { city: resolvedCity, state, country, country_code: countryCode },
+      address: { city: resolvedCity, state: cleanState, country, country_code: countryCode },
       type: isStrictCity ? (r.type ?? null) : "city",
       class: isStrictCity ? (r.class ?? null) : "place",
       addresstype: isStrictCity ? (r.addresstype ?? null) : "city",
@@ -166,6 +168,7 @@ export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise
   return out;
 }
 
+// Dedup key using full city+state+country
 function cityDedupKey(r: GeoResult): string {
   const city =
     (r.address.city as string | undefined) ??
@@ -173,6 +176,16 @@ function cityDedupKey(r: GeoResult): string {
   const state = (r.address.state as string | undefined) ?? "";
   const country = (r.address.country as string | undefined) ?? "";
   return [city, state, country].map((s) => s.toLowerCase().trim()).join("|");
+}
+
+// Coarser key using only city+country — catches duplicates where state names
+// differ between providers (e.g. "Valais" vs "Valais/Wallis")
+function cityShortKey(r: GeoResult): string {
+  const city =
+    (r.address.city as string | undefined) ??
+    r.display_name.split(",")[0].trim();
+  const country = (r.address.country as string | undefined) ?? "";
+  return [city, country].map((s) => s.toLowerCase().trim()).join("|");
 }
 
 /** Normalize a Geoapify result to clean "City, State, Country" format. */
@@ -191,11 +204,25 @@ function normalizeGeoapifyResult(r: GeoResult): GeoResult | null {
   };
 }
 
+/** Sort results so exact and prefix city-name matches float to the top. */
+function rankByRelevance(results: GeoResult[], query: string): GeoResult[] {
+  const q = query.toLowerCase().trim();
+  return [...results].sort((a, b) => {
+    const aCity = ((a.address.city as string | undefined) ?? a.display_name.split(",")[0])
+      .toLowerCase().trim();
+    const bCity = ((b.address.city as string | undefined) ?? b.display_name.split(",")[0])
+      .toLowerCase().trim();
+    const score = (city: string) =>
+      city === q ? 0 : city.startsWith(q) ? 1 : city.includes(q) ? 2 : 3;
+    return score(aCity) - score(bCity);
+  });
+}
+
 /**
  * Combined city search. Geoapify (via backend) and Nominatim run in parallel.
- * All results are normalized to "City, State, Country" and deduplicated.
- * Any POI/sub-city input (neighbourhood, university, park…) resolves up to
- * its parent city — the dropdown only ever shows cities.
+ * Results are normalized to "City, State, Country", deduplicated across both
+ * providers (handles bilingual/abbreviated state name mismatches), and ranked
+ * so direct city-name matches surface first.
  */
 export async function searchPlaces(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
   const [geoapifyRes, nominatimRes] = await Promise.allSettled([
@@ -212,18 +239,22 @@ export async function searchPlaces(q: string, signal?: AbortSignal): Promise<Geo
   const rawPrimary = geoapifyRes.status === "fulfilled" ? geoapifyRes.value : [];
   const supplement = nominatimRes.status === "fulfilled" ? nominatimRes.value : [];
 
-  // Normalize Geoapify results to "City, State, Country" and drop anything
-  // that can't resolve to a city
   const primary = rawPrimary
     .map(normalizeGeoapifyResult)
     .filter((r): r is GeoResult => r !== null);
 
-  const seen = new Set(primary.map(cityDedupKey));
+  // Two-level dedup: full key catches same-state dupes, short key catches
+  // cross-provider state-name mismatches (e.g. "Verbier, Valais" vs "Verbier, Valais/Wallis")
+  const seenFull = new Set(primary.map(cityDedupKey));
+  const seenShort = new Set(primary.map(cityShortKey));
   const merged = [
     ...primary,
-    ...supplement.filter((r) => !seen.has(cityDedupKey(r))),
+    ...supplement.filter(
+      (r) => !seenFull.has(cityDedupKey(r)) && !seenShort.has(cityShortKey(r))
+    ),
   ];
-  return merged.slice(0, 12);
+
+  return rankByRelevance(merged, q).slice(0, 10);
 }
 
 // ─── Share ───────────────────────────────────────────────────────────────────
