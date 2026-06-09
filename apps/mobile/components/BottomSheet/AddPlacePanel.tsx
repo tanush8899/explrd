@@ -9,7 +9,7 @@ import {
 } from "react-native";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { useSession } from "@/lib/SessionContext";
-import { geocode, savePin, type GeoResult } from "@/lib/api";
+import { searchPlaces, savePin, type GeoResult } from "@/lib/api";
 import type { SavedPlace } from "@explrd/shared";
 
 type Props = {
@@ -54,7 +54,7 @@ export default function AddPlacePanel({
       abortRef.current = new AbortController();
       setSearching(true);
       try {
-        const res = await geocode(text, abortRef.current.signal);
+        const res = await searchPlaces(text, abortRef.current.signal);
         setResults(res);
       } catch (e: unknown) {
         if ((e as Error)?.name !== "AbortError") {

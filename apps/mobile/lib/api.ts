@@ -90,6 +90,273 @@ export async function deletePin(
   }
 }
 
+// ─── Apple Maps Server API ───────────────────────────────────────────────────
+
+type AppleMapsResult = {
+  name: string;
+  formattedAddressLines: string[];
+  // country and countryCode are top-level on the result, not inside structuredAddress
+  country?: string;
+  countryCode?: string;
+  structuredAddress?: {
+    locality?: string;
+    administrativeArea?: string;
+  };
+  coordinate: { latitude: number; longitude: number };
+};
+
+// Apple access tokens last 30 minutes — cache them to avoid an extra round-trip per search
+let _appleMapsAccessToken: string | null = null;
+let _appleMapsTokenExpiry = 0;
+
+async function getAppleMapsAccessToken(): Promise<string | null> {
+  const jwt = process.env.EXPO_PUBLIC_APPLE_MAPS_TOKEN;
+  if (!jwt) return null;
+
+  if (_appleMapsAccessToken && Date.now() / 1000 < _appleMapsTokenExpiry - 60) {
+    return _appleMapsAccessToken;
+  }
+
+  try {
+    const res = await fetch("https://maps-api.apple.com/v1/token", {
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { accessToken: string; expiresInSeconds: number };
+    _appleMapsAccessToken = data.accessToken;
+    _appleMapsTokenExpiry = Math.floor(Date.now() / 1000) + data.expiresInSeconds;
+    return _appleMapsAccessToken;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * City search via Apple Maps Server API.
+ * Returns Apple-quality ranked results (same ranking as the native Maps app).
+ * Degrades gracefully to empty if the JWT is missing/expired.
+ */
+export async function appleMapsGeocode(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
+  const accessToken = await getAppleMapsAccessToken();
+  if (!accessToken) return [];
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://maps-api.apple.com/v1/search?q=${encodeURIComponent(q)}&lang=en-US`,
+      { signal, headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+  } catch {
+    return [];
+  }
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as { results?: AppleMapsResult[] };
+  const seen = new Set<string>();
+  const out: GeoResult[] = [];
+
+  for (const place of data.results ?? []) {
+    const addr = place.structuredAddress;
+    const city = addr?.locality || place.name;
+    const state = addr?.administrativeArea;
+    const country = place.country;        // top-level field
+    const countryCode = place.countryCode; // top-level field
+
+    if (!city || !country) continue;
+
+    const key = `${city.toLowerCase()}|${country.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    out.push({
+      place_id: `apple:${city.toLowerCase().replace(/\s+/g, "-")}:${countryCode?.toLowerCase() ?? ""}`,
+      display_name: [city, state, country].filter(Boolean).join(", "),
+      lat: place.coordinate.latitude,
+      lng: place.coordinate.longitude,
+      address: { city, state, country, country_code: countryCode },
+      type: "city",
+      class: "place",
+      addresstype: "city",
+      landmark_name: null,
+    });
+  }
+  return out;
+}
+
+// ─── Nominatim landmark/city search ─────────────────────────────────────────
+
+type NominatimItem = {
+  place_id: number;
+  lat: string;
+  lon: string;
+  display_name: string;
+  type: string;
+  class: string;
+  addresstype: string;
+  address: Record<string, string | undefined>;
+};
+
+// Only genuine city-level admin units; everything finer resolves up to parent city
+const STRICT_CITY_TYPES = new Set([
+  "city", "town", "village", "hamlet", "municipality", "borough",
+]);
+
+function nominatimAddrCity(addr: Record<string, string | undefined>): string | undefined {
+  return (
+    addr.city ?? addr.town ?? addr.village ??
+    addr.municipality ?? addr.borough ?? addr.hamlet
+  );
+}
+
+/** Search Nominatim directly. Every result is resolved to a city. */
+export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
+  const url =
+    `https://nominatim.openstreetmap.org/search` +
+    `?format=json&q=${encodeURIComponent(q)}&addressdetails=1&limit=10&accept-language=en`;
+
+  const res = await fetch(url, {
+    signal,
+    headers: { "User-Agent": "Explrd/1.0", "Accept-Language": "en" },
+  });
+  if (!res.ok) throw new Error(`nominatim: ${res.status}`);
+
+  const data: NominatimItem[] = await res.json();
+  const seen = new Set<string>();
+  const out: GeoResult[] = [];
+
+  for (const r of data) {
+    const addr = r.address;
+    const state = addr.state;
+    const country = addr.country;
+    const countryCode = addr.country_code?.toUpperCase();
+    const isStrictCity = STRICT_CITY_TYPES.has((r.addresstype ?? "").toLowerCase());
+
+    // City → use its own name; anything finer → resolve to parent city
+    const resolvedCity = isStrictCity
+      ? r.display_name.split(",")[0].trim()
+      : nominatimAddrCity(addr);
+    if (!resolvedCity) continue;
+
+    // Strip bilingual slash-names (e.g. "Valais/Wallis" → "Valais")
+    const cleanState = state?.split("/")[0].trim();
+    const key = `${resolvedCity.toLowerCase()}|${cleanState?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    const rawName = r.display_name.split(",")[0].trim();
+    out.push({
+      place_id: isStrictCity
+        ? `nom:${r.place_id}`
+        : `nom:city:${key.replace(/\|/g, ":")}`,
+      display_name: [resolvedCity, cleanState, country].filter(Boolean).join(", "),
+      lat: parseFloat(r.lat),
+      lng: parseFloat(r.lon),
+      address: { city: resolvedCity, state: cleanState, country, country_code: countryCode },
+      type: isStrictCity ? (r.type ?? null) : "city",
+      class: isStrictCity ? (r.class ?? null) : "place",
+      addresstype: isStrictCity ? (r.addresstype ?? null) : "city",
+      landmark_name: !isStrictCity && rawName !== resolvedCity ? rawName : null,
+    });
+  }
+  return out;
+}
+
+// Dedup key using full city+state+country
+function cityDedupKey(r: GeoResult): string {
+  const city =
+    (r.address.city as string | undefined) ??
+    r.display_name.split(",")[0].trim();
+  const state = (r.address.state as string | undefined) ?? "";
+  const country = (r.address.country as string | undefined) ?? "";
+  return [city, state, country].map((s) => s.toLowerCase().trim()).join("|");
+}
+
+// Coarser key using only city+country — catches duplicates where state names
+// differ between providers (e.g. "Valais" vs "Valais/Wallis")
+function cityShortKey(r: GeoResult): string {
+  const city =
+    (r.address.city as string | undefined) ??
+    r.display_name.split(",")[0].trim();
+  const country = (r.address.country as string | undefined) ?? "";
+  return [city, country].map((s) => s.toLowerCase().trim()).join("|");
+}
+
+/** Normalize a Geoapify result to clean "City, State, Country" format. */
+function normalizeGeoapifyResult(r: GeoResult): GeoResult | null {
+  const city =
+    (r.address.city as string | undefined) ??
+    (r.address.town as string | undefined) ??
+    (r.address.village as string | undefined) ??
+    r.display_name.split(",")[0].trim();
+  const state = r.address.state as string | undefined;
+  const country = r.address.country as string | undefined;
+  if (!city) return null;
+  return {
+    ...r,
+    display_name: [city, state, country].filter(Boolean).join(", "),
+  };
+}
+
+/** Sort results so exact and prefix city-name matches float to the top. */
+function rankByRelevance(results: GeoResult[], query: string): GeoResult[] {
+  const q = query.toLowerCase().trim();
+  return [...results].sort((a, b) => {
+    const aCity = ((a.address.city as string | undefined) ?? a.display_name.split(",")[0])
+      .toLowerCase().trim();
+    const bCity = ((b.address.city as string | undefined) ?? b.display_name.split(",")[0])
+      .toLowerCase().trim();
+    const score = (city: string) =>
+      city === q ? 0 : city.startsWith(q) ? 1 : city.includes(q) ? 2 : 3;
+    return score(aCity) - score(bCity);
+  });
+}
+
+/**
+ * Combined city search.
+ *
+ * Priority:
+ *   1. Apple Maps Server API  — best ranking (same as native Maps app), free 25k/day
+ *   2. Geoapify (via backend) — fills gaps when Apple returns nothing
+ *   3. Nominatim              — last-resort for obscure places / landmark → city
+ *
+ * All three run in parallel. Results are normalized to "City, State, Country",
+ * deduplicated across providers, and ranked so exact/prefix matches float up.
+ */
+export async function searchPlaces(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
+  const [appleRes, geoapifyRes, nominatimRes] = await Promise.allSettled([
+    appleMapsGeocode(q, signal),
+    geocode(q, signal),
+    nominatimGeocode(q, signal),
+  ]);
+
+  if (signal?.aborted) {
+    const err = new Error("AbortError");
+    err.name = "AbortError";
+    throw err;
+  }
+
+  const apple    = appleRes.status    === "fulfilled" ? appleRes.value    : [];
+  const geoapify = (geoapifyRes.status === "fulfilled" ? geoapifyRes.value : [])
+    .map(normalizeGeoapifyResult)
+    .filter((r): r is GeoResult => r !== null);
+  const nominatim = nominatimRes.status === "fulfilled" ? nominatimRes.value : [];
+
+  // Apple is primary when it returns results; Geoapify is primary otherwise
+  const primary   = apple.length > 0 ? apple : geoapify;
+  const fallbacks = apple.length > 0 ? [...geoapify, ...nominatim] : nominatim;
+
+  const seenFull  = new Set(primary.map(cityDedupKey));
+  const seenShort = new Set(primary.map(cityShortKey));
+  const merged = [
+    ...primary,
+    ...fallbacks.filter(
+      (r) => !seenFull.has(cityDedupKey(r)) && !seenShort.has(cityShortKey(r))
+    ),
+  ];
+
+  return rankByRelevance(merged, q).slice(0, 10);
+}
+
 // ─── Share ───────────────────────────────────────────────────────────────────
 
 /** POST /api/share-link */
