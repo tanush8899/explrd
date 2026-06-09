@@ -90,6 +90,134 @@ export async function deletePin(
   }
 }
 
+// ─── Nominatim landmark/city search ─────────────────────────────────────────
+
+type NominatimItem = {
+  place_id: number;
+  lat: string;
+  lon: string;
+  display_name: string;
+  type: string;
+  class: string;
+  addresstype: string;
+  address: Record<string, string | undefined>;
+};
+
+const CITY_ADDR_TYPES = new Set([
+  "city", "town", "village", "hamlet", "municipality",
+  "borough", "suburb", "quarter", "neighbourhood", "neighborhood",
+  "district", "city_district", "county", "locality", "island",
+]);
+
+function nominatimCity(addr: Record<string, string | undefined>): string | undefined {
+  return (
+    addr.city ?? addr.town ?? addr.village ??
+    addr.municipality ?? addr.borough ?? addr.hamlet
+  );
+}
+
+/** Search Nominatim directly; POIs are resolved to their parent city. */
+export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
+  const url =
+    `https://nominatim.openstreetmap.org/search` +
+    `?format=json&q=${encodeURIComponent(q)}&addressdetails=1&limit=10&accept-language=en`;
+
+  const res = await fetch(url, {
+    signal,
+    headers: { "User-Agent": "Explrd/1.0", "Accept-Language": "en" },
+  });
+  if (!res.ok) throw new Error(`nominatim: ${res.status}`);
+
+  const data: NominatimItem[] = await res.json();
+  const seen = new Set<string>();
+  const out: GeoResult[] = [];
+
+  for (const r of data) {
+    const addr = r.address;
+    const city = nominatimCity(addr);
+    const state = addr.state;
+    const country = addr.country;
+    const countryCode = addr.country_code?.toUpperCase();
+    const isCity = CITY_ADDR_TYPES.has((r.addresstype ?? "").toLowerCase());
+
+    if (isCity) {
+      const resolvedCity = r.display_name.split(",")[0].trim();
+      const key = `${resolvedCity.toLowerCase()}|${state?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      out.push({
+        place_id: `nom:${r.place_id}`,
+        display_name: [resolvedCity, state, country].filter(Boolean).join(", "),
+        lat: parseFloat(r.lat),
+        lng: parseFloat(r.lon),
+        address: { city: resolvedCity, state, country, country_code: countryCode },
+        type: r.type ?? null,
+        class: r.class ?? null,
+        addresstype: r.addresstype ?? null,
+        landmark_name: null,
+      });
+    } else if (city) {
+      // POI/landmark — surface its parent city instead
+      const key = `${city.toLowerCase()}|${state?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      // Keep the landmark name (e.g. "Penn State University") as context
+      const landmarkName = r.display_name.split(",")[0].trim();
+      out.push({
+        place_id: `nom:city:${key.replace(/\|/g, ":")}`,
+        display_name: [city, state, country].filter(Boolean).join(", "),
+        lat: parseFloat(r.lat),
+        lng: parseFloat(r.lon),
+        address: { city, state, country, country_code: countryCode },
+        type: "city",
+        class: "place",
+        addresstype: "city",
+        landmark_name: landmarkName !== city ? landmarkName : null,
+      });
+    }
+  }
+  return out;
+}
+
+function cityDedupKey(r: GeoResult): string {
+  const city =
+    (r.address.city as string | undefined) ??
+    r.display_name.split(",")[0].trim();
+  const state = (r.address.state as string | undefined) ?? "";
+  const country = (r.address.country as string | undefined) ?? "";
+  return [city, state, country].map((s) => s.toLowerCase().trim()).join("|");
+}
+
+/**
+ * Combined city/landmark search.
+ * Primary results come from the Geoapify backend; Nominatim supplements with
+ * any landmark → city resolutions that Geoapify missed (e.g. "Penn State",
+ * "Big Bend", "Cape May").
+ */
+export async function searchPlaces(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
+  const [geoapifyRes, nominatimRes] = await Promise.allSettled([
+    geocode(q, signal),
+    nominatimGeocode(q, signal),
+  ]);
+
+  // Propagate abort so the caller's catch block can suppress UI updates
+  if (signal?.aborted) {
+    const err = new Error("AbortError");
+    err.name = "AbortError";
+    throw err;
+  }
+
+  const primary = geoapifyRes.status === "fulfilled" ? geoapifyRes.value : [];
+  const supplement = nominatimRes.status === "fulfilled" ? nominatimRes.value : [];
+
+  const seen = new Set(primary.map(cityDedupKey));
+  const merged = [
+    ...primary,
+    ...supplement.filter((r) => !seen.has(cityDedupKey(r))),
+  ];
+  return merged.slice(0, 12);
+}
+
 // ─── Share ───────────────────────────────────────────────────────────────────
 
 /** POST /api/share-link */
