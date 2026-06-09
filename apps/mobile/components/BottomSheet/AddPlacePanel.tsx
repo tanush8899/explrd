@@ -1,27 +1,37 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
   TextInput,
   TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
+  Keyboard,
   StyleSheet,
 } from "react-native";
-import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
+import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
-import { geocode, savePin, type GeoResult } from "@/lib/api";
+import { searchPlaces, savePin, type GeoResult } from "@/lib/api";
 import type { SavedPlace } from "@explrd/shared";
 
 type Props = {
+  places: SavedPlace[];
   onSaved: (place: SavedPlace) => void;
+  onDelete: (placeId: string) => Promise<void>;
   onSearchFocus: () => void;
   onSearchBlur: () => void;
+  onSelectPlace: (result: GeoResult) => void;
+  onDeselectPlace: () => void;
 };
 
 export default function AddPlacePanel({
+  places,
   onSaved,
+  onDelete,
   onSearchFocus,
   onSearchBlur,
+  onSelectPlace,
+  onDeselectPlace,
 }: Props) {
   const { session } = useSession();
   const [query, setQuery] = useState("");
@@ -29,16 +39,22 @@ export default function AddPlacePanel({
   const [selected, setSelected] = useState<GeoResult | null>(null);
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
 
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [kbHeight, setKbHeight] = useState(0);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  };
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardWillShow", (e) => {
+      setKbHeight(e.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener("keyboardWillHide", () => {
+      setKbHeight(0);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const handleSearch = useCallback((text: string) => {
     setQuery(text);
@@ -54,7 +70,7 @@ export default function AddPlacePanel({
       abortRef.current = new AbortController();
       setSearching(true);
       try {
-        const res = await geocode(text, abortRef.current.signal);
+        const res = await searchPlaces(text, abortRef.current.signal);
         setResults(res);
       } catch (e: unknown) {
         if ((e as Error)?.name !== "AbortError") {
@@ -65,6 +81,18 @@ export default function AddPlacePanel({
       }
     }, 350);
   }, []);
+
+  const handleSelectResult = (item: GeoResult) => {
+    Keyboard.dismiss();
+    setSelected(item);
+    onSelectPlace(item);
+  };
+
+  const handleDeselect = () => {
+    setSelected(null);
+    setError(null);
+    onDeselectPlace();
+  };
 
   const handleSave = async () => {
     if (!selected || !session?.access_token) return;
@@ -78,8 +106,6 @@ export default function AddPlacePanel({
         lng: selected.lng,
         address: selected.address,
       });
-      showToast("Place saved!");
-      // Optimistic update — parent will full-refresh in background
       onSaved({
         place_id: selected.place_id,
         name: selected.display_name,
@@ -99,9 +125,11 @@ export default function AddPlacePanel({
         country_boundary: null,
         continent_boundary: null,
       } satisfies SavedPlace);
+      // Clear selection and go back to search
+      setSelected(null);
       setQuery("");
       setResults([]);
-      setSelected(null);
+      onDeselectPlace();
     } catch (e: unknown) {
       setError((e as Error)?.message ?? "Failed to save. Try again.");
     } finally {
@@ -116,19 +144,100 @@ export default function AddPlacePanel({
     setError(null);
   };
 
-  return (
-    <BottomSheetScrollView
-      contentContainerStyle={styles.container}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Text style={styles.title}>Add a Place</Text>
+  const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
 
+  // ── Place card (shown after selecting a result) ───────────────────────────
+  if (selected) {
+    const parts = selected.display_name.split(",");
+    const primaryName = parts[0].trim();
+    const locationDetail = parts.slice(1).join(",").trim();
+    const alreadySaved = places.some((p) => p.place_id === selected.place_id);
+
+    const handleRemove = async () => {
+      setDeleting(true);
+      setError(null);
+      try {
+        await onDelete(selected.place_id);
+      } catch (e: unknown) {
+        setError((e as Error)?.message ?? "Failed to remove. Try again.");
+      } finally {
+        setDeleting(false);
+      }
+    };
+
+    return (
+      <View style={styles.placeCard}>
+        {/* Back row */}
+        <TouchableOpacity onPress={handleDeselect} style={styles.backBtn} activeOpacity={0.7}>
+          <Text style={styles.backArrow}>‹</Text>
+          <Text style={styles.backLabel}>Back to results</Text>
+        </TouchableOpacity>
+
+        {/* Place info */}
+        <View style={styles.placeInfo}>
+          <View style={styles.pinDot} />
+          <View style={styles.placeTextBlock}>
+            <Text style={styles.placeName} numberOfLines={2}>{primaryName}</Text>
+            {locationDetail ? (
+              <Text style={styles.placeLocation} numberOfLines={1}>{locationDetail}</Text>
+            ) : null}
+          </View>
+        </View>
+
+        {error ? <Text style={styles.errorText}>{error}</Text> : null}
+
+        {/* CTA */}
+        {alreadySaved ? (
+          <TouchableOpacity
+            onPress={handleRemove}
+            disabled={deleting}
+            style={styles.removeBtn}
+            activeOpacity={0.7}
+          >
+            {deleting ? (
+              <ActivityIndicator size="small" color="#dc2626" />
+            ) : (
+              <Text style={styles.removeBtnText}>Remove from Explr</Text>
+            )}
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity
+            onPress={handleSave}
+            disabled={saving}
+            style={styles.addBtn}
+            activeOpacity={0.85}
+          >
+            {saving ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.addBtnText}>Add to Explr</Text>
+            )}
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  // ── Search view ───────────────────────────────────────────────────────────
+  return (
+    <ScrollView
+      contentContainerStyle={[styles.container, { paddingBottom: Math.max(48, kbHeight + 20) }]}
+      keyboardShouldPersistTaps="handled"
+      scrollEnabled={scrollEnabled}
+      scrollEventThrottle={16}
+      onScrollEndDrag={(e) => {
+        const { contentOffset, velocity } = e.nativeEvent;
+        if (contentOffset.y <= 0 && (velocity?.y ?? 0) < -0.3) {
+          onScrollEndDragAtTop(Math.abs(velocity?.y ?? 0));
+        }
+      }}
+    >
       {/* Search input */}
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
-          placeholder="Search city, country…"
-          placeholderTextColor="#868c94"
+          placeholder="Search city, landmark, country…"
+          placeholderTextColor="#adb1b8"
           value={query}
           onChangeText={handleSearch}
           onFocus={onSearchFocus}
@@ -136,54 +245,24 @@ export default function AddPlacePanel({
           returnKeyType="search"
           autoCorrect={false}
           autoCapitalize="none"
+          autoFocus
+          clearButtonMode="never"
         />
         {searching ? (
-          <ActivityIndicator size="small" color="#868c94" style={styles.inputIcon} />
+          <ActivityIndicator size="small" color="#adb1b8" style={styles.inputEndSlot} />
         ) : query.length > 0 ? (
-          <TouchableOpacity onPress={clearSearch} style={styles.inputIcon} hitSlop={8}>
-            <Text style={styles.clearBtn}>✕</Text>
+          <TouchableOpacity onPress={clearSearch} style={styles.clearBtnWrapper} hitSlop={4}>
+            <View style={styles.clearBtnCircle}>
+              <Text style={styles.clearBtnText}>✕</Text>
+            </View>
           </TouchableOpacity>
         ) : null}
       </View>
 
-      {/* Error */}
       {error && <Text style={styles.errorText}>{error}</Text>}
 
-      {/* Toast */}
-      {toast && (
-        <View style={styles.toast}>
-          <Text style={styles.toastText}>{toast}</Text>
-        </View>
-      )}
-
-      {/* Selected preview + confirm */}
-      {selected && (
-        <View style={styles.selectedBox}>
-          <Text style={styles.selectedName} numberOfLines={2}>
-            {selected.display_name}
-          </Text>
-          <Text style={styles.selectedCoords}>
-            {selected.lat.toFixed(4)}, {selected.lng.toFixed(4)}
-          </Text>
-          <TouchableOpacity
-            onPress={handleSave}
-            disabled={saving}
-            style={styles.saveBtn}
-          >
-            {saving ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.saveBtnText}>Save Place</Text>
-            )}
-          </TouchableOpacity>
-          <TouchableOpacity onPress={() => setSelected(null)} style={styles.cancelBtn}>
-            <Text style={styles.cancelBtnText}>Cancel</Text>
-          </TouchableOpacity>
-        </View>
-      )}
-
-      {/* Results list */}
-      {!selected && results.length > 0 && (
+      {/* Results */}
+      {results.length > 0 && (
         <View style={styles.resultsList}>
           {results.map((item) => {
             const parts = item.display_name.split(",");
@@ -192,17 +271,17 @@ export default function AddPlacePanel({
             return (
               <TouchableOpacity
                 key={item.place_id}
-                onPress={() => setSelected(item)}
+                onPress={() => handleSelectResult(item)}
                 style={styles.resultRow}
+                activeOpacity={0.7}
               >
-                <Text style={styles.resultPrimary} numberOfLines={1}>
-                  {primary}
-                </Text>
-                {secondary ? (
-                  <Text style={styles.resultSecondary} numberOfLines={1}>
-                    {secondary}
-                  </Text>
-                ) : null}
+                <View style={styles.resultPin} />
+                <View style={styles.resultText}>
+                  <Text style={styles.resultPrimary} numberOfLines={1}>{primary}</Text>
+                  {secondary ? (
+                    <Text style={styles.resultSecondary} numberOfLines={1}>{secondary}</Text>
+                  ) : null}
+                </View>
               </TouchableOpacity>
             );
           })}
@@ -210,132 +289,102 @@ export default function AddPlacePanel({
       )}
 
       {/* Empty state */}
-      {!selected && !searching && query.length > 2 && results.length === 0 && (
+      {!searching && query.length > 2 && results.length === 0 && (
         <View style={styles.emptyState}>
           <Text style={styles.emptyText}>No results for "{query}"</Text>
         </View>
       )}
 
-      {/* Hint when idle */}
-      {!selected && query.length === 0 && (
+      {/* Idle hint */}
+      {query.length === 0 && (
         <View style={styles.hintBox}>
           <Text style={styles.hintText}>
-            Type a city or country name to search. Only city-level results can be saved.
+            Search for a city, landmark, or country to add it to your map.
           </Text>
         </View>
       )}
-    </BottomSheetScrollView>
+    </ScrollView>
   );
 }
 
 const styles = StyleSheet.create({
+  // ── Search view ────────────────────────────────────────────────────────────
   container: {
     padding: 16,
-    paddingBottom: 48,
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#111214",
-    marginBottom: 12,
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderWidth: 1,
+    borderWidth: 1.5,
     borderColor: "#e4e6e8",
     borderRadius: 16,
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f7f8f9",
     paddingHorizontal: 14,
+    marginBottom: 4,
   },
   input: {
     flex: 1,
-    paddingVertical: 12,
-    fontSize: 14,
+    paddingVertical: 14,
+    fontSize: 16,
     color: "#111214",
   },
-  inputIcon: {
+  inputEndSlot: {
     marginLeft: 8,
   },
-  clearBtn: {
-    fontSize: 12,
-    color: "#868c94",
+  clearBtnWrapper: {
+    padding: 6,
+    marginLeft: 4,
+  },
+  clearBtnCircle: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#c7c7cc",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  clearBtnText: {
+    fontSize: 11,
+    color: "#ffffff",
+    fontWeight: "700",
+    lineHeight: 14,
+    marginTop: 1,
   },
   errorText: {
     marginTop: 8,
-    fontSize: 12,
+    fontSize: 13,
     color: "#dc2626",
-  },
-  toast: {
-    marginTop: 10,
-    backgroundColor: "#f0fdf4",
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    borderRadius: 12,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-  },
-  toastText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: "#166534",
-  },
-  selectedBox: {
-    marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#bfdbfe",
-    backgroundColor: "#eff6ff",
-    borderRadius: 16,
-    padding: 14,
-  },
-  selectedName: {
-    fontSize: 14,
-    fontWeight: "600",
-    color: "#111214",
-  },
-  selectedCoords: {
-    fontSize: 12,
-    color: "#868c94",
-    marginTop: 4,
-    fontVariant: ["tabular-nums"],
-  },
-  saveBtn: {
-    marginTop: 12,
-    backgroundColor: "#111214",
-    borderRadius: 12,
-    paddingVertical: 12,
-    alignItems: "center",
-  },
-  saveBtnText: {
-    color: "#ffffff",
-    fontSize: 14,
-    fontWeight: "600",
-  },
-  cancelBtn: {
-    marginTop: 8,
-    alignItems: "center",
-    paddingVertical: 6,
-  },
-  cancelBtnText: {
-    fontSize: 13,
-    color: "#868c94",
   },
   resultsList: {
     marginTop: 12,
-    borderWidth: 1,
-    borderColor: "#f0f1f2",
     borderRadius: 16,
     overflow: "hidden",
     backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#f0f1f2",
   },
   resultRow: {
+    flexDirection: "row",
+    alignItems: "center",
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 13,
     borderBottomWidth: 1,
     borderBottomColor: "#f7f8f9",
+    gap: 12,
+  },
+  resultPin: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#c7c7cc",
+    flexShrink: 0,
+    marginTop: 1,
+  },
+  resultText: {
+    flex: 1,
   },
   resultPrimary: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "500",
     color: "#111214",
   },
@@ -345,7 +394,7 @@ const styles = StyleSheet.create({
     marginTop: 2,
   },
   emptyState: {
-    marginTop: 32,
+    marginTop: 40,
     alignItems: "center",
   },
   emptyText: {
@@ -362,5 +411,93 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#868c94",
     lineHeight: 19,
+  },
+
+  // ── Place card ─────────────────────────────────────────────────────────────
+  placeCard: {
+    flex: 1,
+    paddingHorizontal: 20,
+    paddingTop: 6,
+    paddingBottom: 32,
+  },
+  backBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    alignSelf: "flex-start",
+    paddingVertical: 8,
+    paddingRight: 12,
+    marginBottom: 20,
+    gap: 2,
+  },
+  backArrow: {
+    fontSize: 22,
+    color: "#007aff",
+    lineHeight: 26,
+    fontWeight: "300",
+  },
+  backLabel: {
+    fontSize: 15,
+    color: "#007aff",
+    fontWeight: "400",
+  },
+  placeInfo: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    marginBottom: 28,
+  },
+  pinDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#2563eb",
+    marginTop: 5,
+    flexShrink: 0,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
+  },
+  placeTextBlock: {
+    flex: 1,
+  },
+  placeName: {
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#111214",
+    letterSpacing: -0.4,
+    lineHeight: 30,
+  },
+  placeLocation: {
+    fontSize: 14,
+    color: "#868c94",
+    marginTop: 4,
+    lineHeight: 19,
+  },
+  addBtn: {
+    backgroundColor: "#111214",
+    borderRadius: 16,
+    paddingVertical: 16,
+    alignItems: "center",
+  },
+  addBtnText: {
+    color: "#ffffff",
+    fontSize: 16,
+    fontWeight: "600",
+    letterSpacing: -0.2,
+  },
+  removeBtn: {
+    marginTop: 10,
+    borderWidth: 1.5,
+    borderColor: "#fecaca",
+    borderRadius: 16,
+    paddingVertical: 14,
+    alignItems: "center",
+    backgroundColor: "#fff5f5",
+  },
+  removeBtnText: {
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#dc2626",
   },
 });

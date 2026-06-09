@@ -89,6 +89,177 @@ export async function deletePin(
   }
 }
 
+// ─── Nominatim landmark/city search ─────────────────────────────────────────
+
+type NominatimItem = {
+  place_id: number;
+  lat: string;
+  lon: string;
+  display_name: string;
+  type: string;
+  class: string;
+  addresstype: string;
+  address: Record<string, string | undefined>;
+};
+
+// Only genuine city-level admin units; everything finer resolves up to parent city
+const STRICT_CITY_TYPES = new Set([
+  "city", "town", "village", "hamlet", "municipality", "borough",
+]);
+
+function nominatimAddrCity(addr: Record<string, string | undefined>): string | undefined {
+  return (
+    addr.city ?? addr.town ?? addr.village ??
+    addr.municipality ?? addr.borough ?? addr.hamlet
+  );
+}
+
+/** Search Nominatim directly. Every result is resolved to a city. */
+export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
+  const url =
+    `https://nominatim.openstreetmap.org/search` +
+    `?format=json&q=${encodeURIComponent(q)}&addressdetails=1&limit=10&accept-language=en`;
+
+  const res = await fetch(url, {
+    signal,
+    headers: { "User-Agent": "Explrd/1.0", "Accept-Language": "en" },
+  });
+  if (!res.ok) throw new Error(`nominatim: ${res.status}`);
+
+  const data: NominatimItem[] = await res.json();
+  const seen = new Set<string>();
+  const out: GeoResult[] = [];
+
+  for (const r of data) {
+    const addr = r.address;
+    const state = addr.state;
+    const country = addr.country;
+    const countryCode = addr.country_code?.toUpperCase();
+    const isStrictCity = STRICT_CITY_TYPES.has((r.addresstype ?? "").toLowerCase());
+
+    // City → use its own name; anything finer → use parent city from address
+    const resolvedCity = isStrictCity
+      ? r.display_name.split(",")[0].trim()
+      : nominatimAddrCity(addr);
+    if (!resolvedCity) continue;
+
+    const key = `${resolvedCity.toLowerCase()}|${state?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    out.push({
+      place_id: isStrictCity
+        ? `nom:${r.place_id}`
+        : `nom:city:${key.replace(/\|/g, ":")}`,
+      display_name: [resolvedCity, state, country].filter(Boolean).join(", "),
+      lat: parseFloat(r.lat),
+      lng: parseFloat(r.lon),
+      address: { city: resolvedCity, state, country, country_code: countryCode },
+      type: isStrictCity ? (r.type ?? null) : "city",
+      class: isStrictCity ? (r.class ?? null) : "place",
+      addresstype: isStrictCity ? (r.addresstype ?? null) : "city",
+    });
+  }
+  return out;
+}
+
+function cityDedupKey(r: GeoResult): string {
+  const city =
+    (r.address.city as string | undefined) ??
+    r.display_name.split(",")[0].trim();
+  const state = (r.address.state as string | undefined) ?? "";
+  const country = (r.address.country as string | undefined) ?? "";
+  return [city, state, country].map((s) => s.toLowerCase().trim()).join("|");
+}
+
+/** Normalize a Geoapify result to clean "City, State, Country" format. */
+function normalizeGeoapifyResult(r: GeoResult): GeoResult | null {
+  const city =
+    (r.address.city as string | undefined) ??
+    (r.address.town as string | undefined) ??
+    (r.address.village as string | undefined) ??
+    r.display_name.split(",")[0].trim();
+  const state = r.address.state as string | undefined;
+  const country = r.address.country as string | undefined;
+  if (!city) return null;
+  return {
+    ...r,
+    display_name: [city, state, country].filter(Boolean).join(", "),
+  };
+}
+
+/**
+ * Combined city search. Geoapify (via backend) and Nominatim run in parallel.
+ * All results are normalized to "City, State, Country" and deduplicated.
+ * Any POI/sub-city input (neighbourhood, university, park…) resolves up to
+ * its parent city — the dropdown only ever shows cities.
+ */
+export async function searchPlaces(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
+  const [geoapifyRes, nominatimRes] = await Promise.allSettled([
+    geocode(q, signal),
+    nominatimGeocode(q, signal),
+  ]);
+
+  if (signal?.aborted) {
+    const err = new Error("AbortError");
+    err.name = "AbortError";
+    throw err;
+  }
+
+  const rawPrimary = geoapifyRes.status === "fulfilled" ? geoapifyRes.value : [];
+  const supplement = nominatimRes.status === "fulfilled" ? nominatimRes.value : [];
+
+  // Normalize Geoapify results to "City, State, Country" and drop anything
+  // that can't resolve to a city (shouldn't happen, but be defensive)
+  const primary = rawPrimary
+    .map(normalizeGeoapifyResult)
+    .filter((r): r is GeoResult => r !== null);
+
+  const seen = new Set(primary.map(cityDedupKey));
+  const merged = [
+    ...primary,
+    ...supplement.filter((r) => !seen.has(cityDedupKey(r))),
+  ];
+  return merged.slice(0, 12);
+}
+
+// ─── Boundary ────────────────────────────────────────────────────────────────
+
+export type BoundaryGeometry =
+  | { type: "Polygon";      coordinates: number[][][] }
+  | { type: "MultiPolygon"; coordinates: number[][][][] };
+
+/** Fetch the GeoJSON boundary polygon for a lat/lng using Nominatim reverse geocode.
+ *  addresstype drives the zoom level so we get the right admin boundary (city vs country etc). */
+export async function fetchPlaceBoundary(
+  lat: number,
+  lng: number,
+  addresstype?: string | null,
+): Promise<BoundaryGeometry | null> {
+  // Nominatim reverse zoom: 3=country 5=state 8=county 10=city 12=suburb
+  const at = addresstype?.toLowerCase() ?? "";
+  let zoom = 10;
+  if (at === "country") zoom = 3;
+  else if (at === "state" || at === "province" || at === "region") zoom = 5;
+  else if (at === "county" || at === "district") zoom = 8;
+  else if (at === "suburb" || at === "quarter" || at === "neighbourhood") zoom = 12;
+
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse?format=json&lat=${lat}&lon=${lng}&polygon_geojson=1&zoom=${zoom}`,
+      { headers: { "Accept-Language": "en" } },
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    // Reverse endpoint puts the polygon in `geojson` (not `geometry`)
+    const g = data.geojson;
+    if (!g || (g.type !== "Polygon" && g.type !== "MultiPolygon")) return null;
+    return g as BoundaryGeometry;
+  } catch {
+    return null;
+  }
+}
+
 // ─── Share ───────────────────────────────────────────────────────────────────
 
 /** POST /api/share-link */
