@@ -90,6 +90,99 @@ export async function deletePin(
   }
 }
 
+// ─── Apple Maps Server API ───────────────────────────────────────────────────
+
+type AppleMapsResult = {
+  name: string;
+  formattedAddressLines: string[];
+  // country and countryCode are top-level on the result, not inside structuredAddress
+  country?: string;
+  countryCode?: string;
+  structuredAddress?: {
+    locality?: string;
+    administrativeArea?: string;
+  };
+  coordinate: { latitude: number; longitude: number };
+};
+
+// Apple access tokens last 30 minutes — cache them to avoid an extra round-trip per search
+let _appleMapsAccessToken: string | null = null;
+let _appleMapsTokenExpiry = 0;
+
+async function getAppleMapsAccessToken(): Promise<string | null> {
+  const jwt = process.env.EXPO_PUBLIC_APPLE_MAPS_TOKEN;
+  if (!jwt) return null;
+
+  if (_appleMapsAccessToken && Date.now() / 1000 < _appleMapsTokenExpiry - 60) {
+    return _appleMapsAccessToken;
+  }
+
+  try {
+    const res = await fetch("https://maps-api.apple.com/v1/token", {
+      headers: { Authorization: `Bearer ${jwt}` },
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as { accessToken: string; expiresInSeconds: number };
+    _appleMapsAccessToken = data.accessToken;
+    _appleMapsTokenExpiry = Math.floor(Date.now() / 1000) + data.expiresInSeconds;
+    return _appleMapsAccessToken;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * City search via Apple Maps Server API.
+ * Returns Apple-quality ranked results (same ranking as the native Maps app).
+ * Degrades gracefully to empty if the JWT is missing/expired.
+ */
+export async function appleMapsGeocode(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
+  const accessToken = await getAppleMapsAccessToken();
+  if (!accessToken) return [];
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://maps-api.apple.com/v1/search?q=${encodeURIComponent(q)}&lang=en-US`,
+      { signal, headers: { Authorization: `Bearer ${accessToken}` } }
+    );
+  } catch {
+    return [];
+  }
+  if (!res.ok) return [];
+
+  const data = (await res.json()) as { results?: AppleMapsResult[] };
+  const seen = new Set<string>();
+  const out: GeoResult[] = [];
+
+  for (const place of data.results ?? []) {
+    const addr = place.structuredAddress;
+    const city = addr?.locality || place.name;
+    const state = addr?.administrativeArea;
+    const country = place.country;        // top-level field
+    const countryCode = place.countryCode; // top-level field
+
+    if (!city || !country) continue;
+
+    const key = `${city.toLowerCase()}|${country.toLowerCase()}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+
+    out.push({
+      place_id: `apple:${city.toLowerCase().replace(/\s+/g, "-")}:${countryCode?.toLowerCase() ?? ""}`,
+      display_name: [city, state, country].filter(Boolean).join(", "),
+      lat: place.coordinate.latitude,
+      lng: place.coordinate.longitude,
+      address: { city, state, country, country_code: countryCode },
+      type: "city",
+      class: "place",
+      addresstype: "city",
+      landmark_name: null,
+    });
+  }
+  return out;
+}
+
 // ─── Nominatim landmark/city search ─────────────────────────────────────────
 
 type NominatimItem = {
@@ -219,13 +312,19 @@ function rankByRelevance(results: GeoResult[], query: string): GeoResult[] {
 }
 
 /**
- * Combined city search. Geoapify (via backend) and Nominatim run in parallel.
- * Results are normalized to "City, State, Country", deduplicated across both
- * providers (handles bilingual/abbreviated state name mismatches), and ranked
- * so direct city-name matches surface first.
+ * Combined city search.
+ *
+ * Priority:
+ *   1. Apple Maps Server API  — best ranking (same as native Maps app), free 25k/day
+ *   2. Geoapify (via backend) — fills gaps when Apple returns nothing
+ *   3. Nominatim              — last-resort for obscure places / landmark → city
+ *
+ * All three run in parallel. Results are normalized to "City, State, Country",
+ * deduplicated across providers, and ranked so exact/prefix matches float up.
  */
 export async function searchPlaces(q: string, signal?: AbortSignal): Promise<GeoResult[]> {
-  const [geoapifyRes, nominatimRes] = await Promise.allSettled([
+  const [appleRes, geoapifyRes, nominatimRes] = await Promise.allSettled([
+    appleMapsGeocode(q, signal),
     geocode(q, signal),
     nominatimGeocode(q, signal),
   ]);
@@ -236,20 +335,21 @@ export async function searchPlaces(q: string, signal?: AbortSignal): Promise<Geo
     throw err;
   }
 
-  const rawPrimary = geoapifyRes.status === "fulfilled" ? geoapifyRes.value : [];
-  const supplement = nominatimRes.status === "fulfilled" ? nominatimRes.value : [];
-
-  const primary = rawPrimary
+  const apple    = appleRes.status    === "fulfilled" ? appleRes.value    : [];
+  const geoapify = (geoapifyRes.status === "fulfilled" ? geoapifyRes.value : [])
     .map(normalizeGeoapifyResult)
     .filter((r): r is GeoResult => r !== null);
+  const nominatim = nominatimRes.status === "fulfilled" ? nominatimRes.value : [];
 
-  // Two-level dedup: full key catches same-state dupes, short key catches
-  // cross-provider state-name mismatches (e.g. "Verbier, Valais" vs "Verbier, Valais/Wallis")
-  const seenFull = new Set(primary.map(cityDedupKey));
+  // Apple is primary when it returns results; Geoapify is primary otherwise
+  const primary   = apple.length > 0 ? apple : geoapify;
+  const fallbacks = apple.length > 0 ? [...geoapify, ...nominatim] : nominatim;
+
+  const seenFull  = new Set(primary.map(cityDedupKey));
   const seenShort = new Set(primary.map(cityShortKey));
   const merged = [
     ...primary,
-    ...supplement.filter(
+    ...fallbacks.filter(
       (r) => !seenFull.has(cityDedupKey(r)) && !seenShort.has(cityShortKey(r))
     ),
   ];
