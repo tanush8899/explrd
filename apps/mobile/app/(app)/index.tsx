@@ -1,249 +1,233 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import {
-  View,
-  Text,
-  TouchableOpacity,
-  ActivityIndicator,
-  StyleSheet,
-} from "react-native";
-import BottomSheet, {
-  BottomSheetBackdrop,
-  BottomSheetView,
-} from "@gorhom/bottom-sheet";
-import { useSafeAreaInsets } from "react-native-safe-area-context";
+import React, { useCallback, useMemo, useRef, useState } from "react";
+import { View, Keyboard, StyleSheet } from "react-native";
+import Sheet, { type SheetHandle } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
-import { signOut } from "@/lib/auth";
-import { fetchMyPlaces, deletePin } from "@/lib/api";
+import { usePlaces } from "@/lib/PlacesContext";
+
 import AddPlacePanel from "@/components/BottomSheet/AddPlacePanel";
 import MyPlacesPanel from "@/components/BottomSheet/MyPlacesPanel";
 import SharePanel from "@/components/BottomSheet/SharePanel";
-import PlacesMap from "@/components/PlacesMap";
+import FriendsPanel from "@/components/BottomSheet/FriendsPanel";
+import PlacesMap, { type PreviewCoord, type FriendOverlay } from "@/components/PlacesMap";
+import { useFriends } from "@/lib/FriendsContext";
+import ProfileModal from "@/components/ProfileModal";
+import BottomNav, { type NavTab } from "@/components/BottomNav";
+import PassportStamp from "@/components/PassportStamp";
 import type { SavedPlace } from "@explrd/shared";
+import type { GeoResult } from "@/lib/api";
 
-// ─── Constants ────────────────────────────────────────────────────────────────
+// ─── Types ────────────────────────────────────────────────────────────────────
 
-type Tab = "add" | "places" | "share";
+type ActiveTab = NavTab | "add";
 
-const TABS: Array<{ key: Tab; label: string }> = [
-  { key: "add", label: "Add" },
-  { key: "places", label: "My Places" },
-  { key: "share", label: "Share" },
-];
-
-// snap indices: 0 = 30%, 1 = 55%, 2 = 95%
-const SNAP_POINTS = ["30%", "55%", "95%"];
-const TAB_SNAP: Record<Tab, number> = { add: 0, places: 1, share: 1 };
+const TAB_TITLES: Record<ActiveTab, string> = {
+  places: "My Places",
+  friends: "Friends",
+  passport: "Passport",
+  add: "Add Place",
+};
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function MainScreen() {
-  const { session } = useSession();
-  const insets = useSafeAreaInsets();
-  const sheetRef = useRef<BottomSheet>(null);
+  const { user } = useSession();
+  const { places, setPlaces, refresh, deletePlace } = usePlaces();
+  const { selectedData: friendData, mapFilter } = useFriends();
+  const sheetRef = useRef<SheetHandle>(null);
 
-  const [places, setPlaces] = useState<SavedPlace[]>([]);
-  const [loadingPlaces, setLoadingPlaces] = useState(true);
-  const [activeTab, setActiveTab] = useState<Tab>("places");
-  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [activeTab, setActiveTab]       = useState<ActiveTab>("places");
+  const [deletingId, setDeletingId]     = useState<string | null>(null);
+  const [previewCoord, setPreviewCoord] = useState<PreviewCoord | null>(null);
+  const [stampPlace, setStampPlace]     = useState<SavedPlace | null>(null);
+  const [profileOpen, setProfileOpen]   = useState(false);
 
-  const snapPoints = useMemo(() => SNAP_POINTS, []);
+  // Ref so onSnap callback can read activeTab without stale closure
+  const activeTabRef = useRef<ActiveTab>(activeTab);
+  activeTabRef.current = activeTab;
+  // Prevents handleSnap from clearing the preview when save itself triggers the snap
+  const isSavingRef = useRef(false);
 
-  // ── Load places ─────────────────────────────────────────────────────────────
-  const loadPlaces = useCallback(async () => {
-    if (!session?.access_token) return;
-    try {
-      const data = await fetchMyPlaces(session.access_token);
-      setPlaces(data);
-    } catch (e) {
-      console.warn("fetchMyPlaces:", e);
-    } finally {
-      setLoadingPlaces(false);
-    }
-  }, [session?.access_token]);
+  const displayName =
+    (user?.user_metadata?.full_name as string | undefined) ??
+    user?.email?.split("@")[0] ??
+    "Explorer";
 
-  useEffect(() => {
-    loadPlaces();
-  }, [loadPlaces]);
+  const avatarLabel = useMemo(
+    () => displayName.slice(0, 2).toUpperCase(),
+    [displayName],
+  );
 
-  // ── Tab switching ────────────────────────────────────────────────────────────
-  const handleTabPress = (tab: Tab) => {
+  // ── Nav ───────────────────────────────────────────────────────────────────────
+  const handleNavTabPress = useCallback((tab: NavTab) => {
     setActiveTab(tab);
-    sheetRef.current?.snapToIndex(TAB_SNAP[tab]);
-  };
+  }, []);
 
-  // Expand to 95% when search is focused
+  const handleAddPress = useCallback(() => {
+    setActiveTab("add");
+    sheetRef.current?.snapTo(2);
+  }, []);
+
+  const handleSearchPillPress = useCallback(() => {
+    setActiveTab("add");
+    sheetRef.current?.snapTo(2);
+  }, []);
+
+  const handleSearchClose = useCallback(() => {
+    Keyboard.dismiss();
+    setPreviewCoord(null);
+    setActiveTab("places");
+    sheetRef.current?.snapTo(0);
+  }, []);
+
+  // Called by Sheet when it snaps to a new index — if the user drags the sheet
+  // to pill while in the add/search flow, exit the flow entirely.
+  // Guard: skip during programmatic save-snap so the map/polygon stays visible.
+  const handleSnap = useCallback((i: 0 | 1 | 2) => {
+    if (isSavingRef.current) return;
+    if (activeTabRef.current === "add" && i === 0) {
+      Keyboard.dismiss();
+      setPreviewCoord(null);
+      setActiveTab("places");
+    }
+  }, []);
+
+  const handleSelectPlace = useCallback((result: GeoResult) => {
+    setPreviewCoord({
+      lat: result.lat,
+      lng: result.lng,
+      place_id: result.place_id,
+      addresstype: result.addresstype,
+    });
+    sheetRef.current?.snapTo(1);
+  }, []);
+
+  const handleDeselectPlace = useCallback(() => {
+    setPreviewCoord(null);
+    sheetRef.current?.snapTo(2);
+  }, []);
+
   const handleSearchFocus = useCallback(
-    () => sheetRef.current?.snapToIndex(2),
-    []
-  );
-  const handleSearchBlur = useCallback(
-    () => sheetRef.current?.snapToIndex(0),
-    []
+    () => sheetRef.current?.snapTo(2),
+    [],
   );
 
-  // ── CRUD callbacks ───────────────────────────────────────────────────────────
+  // ── CRUD ──────────────────────────────────────────────────────────────────────
   const handleSaved = useCallback(
     (optimistic: SavedPlace) => {
+      // Optimistic insert; background refresh fills in server-normalised fields.
       setPlaces((prev) =>
         prev.some((p) => p.place_id === optimistic.place_id)
           ? prev
-          : [optimistic, ...prev]
+          : [optimistic, ...prev],
       );
-      // Re-fetch in background to get fully-normalised data from the server
-      loadPlaces();
+      refresh();
+      setStampPlace(optimistic);
+      // Collapse sheet to pill — user stays in add tab so they can search again.
+      // isSavingRef prevents handleSnap from switching tabs during this programmatic snap.
+      Keyboard.dismiss();
+      isSavingRef.current = true;
+      sheetRef.current?.snapTo(0);
+      setTimeout(() => { isSavingRef.current = false; }, 600);
     },
-    [loadPlaces]
+    [setPlaces, refresh],
   );
 
   const handleDelete = useCallback(
     async (placeId: string) => {
-      if (!session?.access_token || deletingId) return;
+      if (deletingId) return;
       setDeletingId(placeId);
       try {
-        await deletePin(session.access_token, placeId);
-        setPlaces((prev) => prev.filter((p) => p.place_id !== placeId));
+        await deletePlace(placeId);
       } catch (e) {
-        console.warn("deletePin:", e);
+        console.warn("deletePlace:", e);
+        throw e;
       } finally {
         setDeletingId(null);
       }
     },
-    [session?.access_token, deletingId]
+    [deletePlace, deletingId],
   );
 
-  // ── Backdrop ─────────────────────────────────────────────────────────────────
-  const renderBackdrop = useCallback(
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    (props: any) => (
-      <BottomSheetBackdrop
-        {...props}
-        disappearsOnIndex={1}
-        appearsOnIndex={2}
-        pressBehavior="collapse"
-      />
-    ),
-    []
-  );
+  const navActiveTab: NavTab =
+    activeTab === "add" ? "places" : (activeTab as NavTab);
 
-  // ─── Render ──────────────────────────────────────────────────────────────────
+  // Friend's globe overlay — only while the friends tab is open with a friend selected
+  const friendOverlay: FriendOverlay | null = useMemo(() => {
+    if (activeTab !== "friends" || !friendData) return null;
+    return {
+      places: friendData.places,
+      filter: mapFilter,
+      name: friendData.displayName.split(/\s+/)[0],
+    };
+  }, [activeTab, friendData, mapFilter]);
+
   return (
     <View style={StyleSheet.absoluteFillObject}>
-      {/* ── Map ───────────────────────────────────────────────────────────── */}
-      <PlacesMap places={places} />
+      <PlacesMap places={places} previewCoord={previewCoord} friendOverlay={friendOverlay} />
 
-      {/* Loading overlay — shown until first fetch completes */}
-      {loadingPlaces && (
-        <View style={styles.loadingOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color="#868c94" />
-        </View>
-      )}
-
-      {/* Sign-out pill — floats above the map */}
-      <TouchableOpacity
-        onPress={signOut}
-        style={[styles.signOutBtn, { top: insets.top + 12 }]}
-      >
-        <Text style={styles.signOutText}>Sign out</Text>
-      </TouchableOpacity>
-
-      {/* ── Bottom sheet ──────────────────────────────────────────────────── */}
-      <BottomSheet
+      <Sheet
         ref={sheetRef}
-        index={1}
-        snapPoints={snapPoints}
-        enablePanDownToClose={false}
-        backdropComponent={renderBackdrop}
-        handleIndicatorStyle={styles.sheetHandle}
-        backgroundStyle={styles.sheetBackground}
+        initialIndex={1}
+        title={TAB_TITLES[activeTab]}
+        avatarLabel={avatarLabel}
+        onAvatarPress={() => setProfileOpen(true)}
+        searchPlaceholder="Search city, country…"
+        onSearchPillPress={handleSearchPillPress}
+        showCloseButton={activeTab === "add"}
+        onClose={handleSearchClose}
+        midHeight={previewCoord !== null && activeTab === "add" ? 340 : undefined}
+        onSnap={handleSnap}
+        footer={
+          activeTab !== "add" ? (
+            <BottomNav
+              activeTab={navActiveTab}
+              onTabPress={handleNavTabPress}
+              onAdd={handleAddPress}
+            />
+          ) : undefined
+        }
       >
-        {/* Tab bar — fixed, non-scrollable header */}
-        <BottomSheetView style={styles.tabBar}>
-          {TABS.map((tab) => (
-            <TouchableOpacity
-              key={tab.key}
-              onPress={() => handleTabPress(tab.key)}
-              style={[
-                styles.tabBtn,
-                activeTab === tab.key && styles.tabBtnActive,
-              ]}
-            >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab.key && styles.tabTextActive,
-                ]}
-              >
-                {tab.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </BottomSheetView>
-
-        {/* Panel — each manages its own BottomSheetScrollView internally */}
-        {activeTab === "add" && (
-          <AddPlacePanel
-            onSaved={handleSaved}
-            onSearchFocus={handleSearchFocus}
-            onSearchBlur={handleSearchBlur}
-          />
-        )}
         {activeTab === "places" && (
           <MyPlacesPanel
             places={places}
             onDelete={handleDelete}
             deletingId={deletingId}
+            displayName={displayName}
           />
         )}
-        {activeTab === "share" && <SharePanel places={places} />}
-      </BottomSheet>
+        {activeTab === "friends" && (
+          <FriendsPanel myPlaces={places} myDisplayName={displayName} />
+        )}
+        {activeTab === "passport" && <SharePanel places={places} />}
+        {activeTab === "add" && (
+          <AddPlacePanel
+            places={places}
+            onSaved={handleSaved}
+            onDelete={handleDelete}
+            onSearchFocus={handleSearchFocus}
+            onSearchBlur={() => {}}
+            onSelectPlace={handleSelectPlace}
+            onDeselectPlace={handleDeselectPlace}
+          />
+        )}
+      </Sheet>
+
+      {stampPlace && (
+        <PassportStamp
+          place={stampPlace}
+          onDismiss={() => {
+            setStampPlace(null);
+            setPreviewCoord(null);
+          }}
+        />
+      )}
+
+      <ProfileModal
+        visible={profileOpen}
+        onClose={() => setProfileOpen(false)}
+      />
     </View>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
-const styles = StyleSheet.create({
-  loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(232,234,237,0.7)",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  signOutBtn: {
-    position: "absolute",
-    right: 16,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
-  },
-  signOutText: { fontSize: 12, fontWeight: "500", color: "#111214" },
-
-  sheetHandle: { backgroundColor: "#d1d5db" },
-  sheetBackground: { backgroundColor: "#ffffff" },
-
-  tabBar: {
-    flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 12,
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f1f2",
-  },
-  tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    alignItems: "center",
-    borderRadius: 999,
-  },
-  tabBtnActive: { backgroundColor: "#111214" },
-  tabText: { fontSize: 13, fontWeight: "500", color: "#868c94" },
-  tabTextActive: { color: "#ffffff" },
-});
+const styles = StyleSheet.create({});

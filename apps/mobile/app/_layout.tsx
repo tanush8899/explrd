@@ -5,6 +5,7 @@ import { StatusBar } from "expo-status-bar";
 import * as Linking from "expo-linking";
 import { SessionProvider } from "@/lib/SessionContext";
 import { PlacesProvider } from "@/lib/PlacesContext";
+import { FriendsProvider } from "@/lib/FriendsContext";
 import { supabase } from "@/lib/supabaseClient";
 import "../global.css";
 
@@ -53,12 +54,14 @@ export default function RootLayout() {
       <StatusBar style="light" />
       <SessionProvider>
         <PlacesProvider>
-          <DeepLinkHandler />
-          <Stack screenOptions={{ headerShown: false }}>
-            <Stack.Screen name="(auth)" />
-            <Stack.Screen name="(app)" />
-            <Stack.Screen name="s/[token]" />
-          </Stack>
+          <FriendsProvider>
+            <DeepLinkHandler />
+            <Stack screenOptions={{ headerShown: false }}>
+              <Stack.Screen name="(auth)" />
+              <Stack.Screen name="(app)" />
+              <Stack.Screen name="s/[token]" />
+            </Stack>
+          </FriendsProvider>
         </PlacesProvider>
       </SessionProvider>
     </GestureHandlerRootView>

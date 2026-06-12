@@ -1,21 +1,52 @@
+import React, { useEffect, useRef, useState } from "react";
+import { Animated, View } from "react-native";
 import { Redirect, Stack } from "expo-router";
-import { View, ActivityIndicator } from "react-native";
 import { useSession } from "@/lib/SessionContext";
+import { usePlaces } from "@/lib/PlacesContext";
+import SplashScreen from "@/components/SplashScreen";
+
+// Minimum visible time from mount so entrance animations always complete.
+const MIN_SPLASH_MS = 1400;
 
 export default function AppLayout() {
-  const { loading, user } = useSession();
+  const { loading: sessionLoading, user } = useSession();
+  const { loading: placesLoading } = usePlaces();
 
-  if (loading) {
-    return (
-      <View style={{ flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: "#fafbfc" }}>
-        <ActivityIndicator size="large" color="#111214" />
-      </View>
-    );
-  }
+  const [showSplash, setShowSplash] = useState(true);
+  const splashOpacity = useRef(new Animated.Value(1)).current;
+  const mountedAt = useRef(Date.now());
 
-  if (!user) {
-    return <Redirect href="/(auth)/login" />;
-  }
+  // Wait until BOTH session and initial places fetch are done before fading.
+  const allReady = !sessionLoading && !placesLoading;
 
-  return <Stack screenOptions={{ headerShown: false }} />;
+  useEffect(() => {
+    if (!allReady) return;
+
+    const elapsed = Date.now() - mountedAt.current;
+    const holdMs  = Math.max(0, MIN_SPLASH_MS - elapsed);
+
+    const id = setTimeout(() => {
+      Animated.timing(splashOpacity, {
+        toValue: 0,
+        duration: 520,
+        useNativeDriver: true,
+      }).start(() => setShowSplash(false));
+    }, holdMs);
+
+    return () => clearTimeout(id);
+  }, [allReady]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return (
+    <View style={{ flex: 1 }}>
+      {/* Real content renders underneath while the splash is still visible.
+          The map and sheet get time to hydrate before they are revealed. */}
+      {!sessionLoading && (
+        user
+          ? <Stack screenOptions={{ headerShown: false }} />
+          : <Redirect href="/(auth)/login" />
+      )}
+
+      {showSplash && <SplashScreen opacity={splashOpacity} />}
+    </View>
+  );
 }
