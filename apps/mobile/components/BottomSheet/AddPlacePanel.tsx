@@ -1,39 +1,37 @@
-import React, { useCallback, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
 import {
   View,
   Text,
+  TextInput,
   TouchableOpacity,
   ActivityIndicator,
+  ScrollView,
   Keyboard,
   StyleSheet,
 } from "react-native";
-import {
-  BottomSheetScrollView,
-  BottomSheetTextInput,
-} from "@gorhom/bottom-sheet";
-import { Icon } from "@/components/Glass";
+import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
 import { searchPlaces, savePin, type GeoResult } from "@/lib/api";
 import type { SavedPlace } from "@explrd/shared";
 
-const BLUE = "#0a84ff";
-
 type Props = {
   places: SavedPlace[];
   onSaved: (place: SavedPlace) => void;
-  onDelete: (placeId: string) => Promise<void> | void;
+  onDelete: (placeId: string) => Promise<void>;
+  onSearchFocus: () => void;
+  onSearchBlur: () => void;
   onSelectPlace: (result: GeoResult) => void;
   onDeselectPlace: () => void;
-  onDone: () => void;
 };
 
 export default function AddPlacePanel({
   places,
   onSaved,
   onDelete,
+  onSearchFocus,
+  onSearchBlur,
   onSelectPlace,
   onDeselectPlace,
-  onDone,
 }: Props) {
   const { session } = useSession();
   const [query, setQuery] = useState("");
@@ -46,6 +44,17 @@ export default function AddPlacePanel({
 
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [kbHeight, setKbHeight] = useState(0);
+
+  useEffect(() => {
+    const show = Keyboard.addListener("keyboardWillShow", (e) => {
+      setKbHeight(e.endCoordinates.height);
+    });
+    const hide = Keyboard.addListener("keyboardWillHide", () => {
+      setKbHeight(0);
+    });
+    return () => { show.remove(); hide.remove(); };
+  }, []);
 
   const handleSearch = useCallback((text: string) => {
     setQuery(text);
@@ -116,11 +125,11 @@ export default function AddPlacePanel({
         country_boundary: null,
         continent_boundary: null,
       } satisfies SavedPlace);
-      // Clear and head back to the map
+      // Clear selection and go back to search
       setSelected(null);
       setQuery("");
       setResults([]);
-      onDone();
+      onDeselectPlace();
     } catch (e: unknown) {
       setError((e as Error)?.message ?? "Failed to save. Try again.");
     } finally {
@@ -135,7 +144,9 @@ export default function AddPlacePanel({
     setError(null);
   };
 
-  // ── Selected place card ─────────────────────────────────────────────────────
+  const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
+
+  // ── Place card (shown after selecting a result) ───────────────────────────
   if (selected) {
     const parts = selected.display_name.split(",");
     const primaryName = parts[0].trim();
@@ -147,7 +158,6 @@ export default function AddPlacePanel({
       setError(null);
       try {
         await onDelete(selected.place_id);
-        handleDeselect();
       } catch (e: unknown) {
         setError((e as Error)?.message ?? "Failed to remove. Try again.");
       } finally {
@@ -158,28 +168,18 @@ export default function AddPlacePanel({
     return (
       <View style={styles.placeCard}>
         {/* Back row */}
-        <TouchableOpacity
-          onPress={handleDeselect}
-          style={styles.backBtn}
-          activeOpacity={0.7}
-        >
-          <Icon name="chevron.left" fallback="‹" size={14} color={BLUE} weight="semibold" />
-          <Text style={styles.backLabel}>Results</Text>
+        <TouchableOpacity onPress={handleDeselect} style={styles.backBtn} activeOpacity={0.7}>
+          <Text style={styles.backArrow}>‹</Text>
+          <Text style={styles.backLabel}>Back to results</Text>
         </TouchableOpacity>
 
         {/* Place info */}
         <View style={styles.placeInfo}>
-          <View style={styles.placeIconCircle}>
-            <Icon name="mappin.and.ellipse" fallback="📍" size={22} color={BLUE} />
-          </View>
+          <View style={styles.pinDot} />
           <View style={styles.placeTextBlock}>
-            <Text style={styles.placeName} numberOfLines={2}>
-              {primaryName}
-            </Text>
+            <Text style={styles.placeName} numberOfLines={2}>{primaryName}</Text>
             {locationDetail ? (
-              <Text style={styles.placeLocation} numberOfLines={2}>
-                {locationDetail}
-              </Text>
+              <Text style={styles.placeLocation} numberOfLines={1}>{locationDetail}</Text>
             ) : null}
           </View>
         </View>
@@ -195,9 +195,9 @@ export default function AddPlacePanel({
             activeOpacity={0.7}
           >
             {deleting ? (
-              <ActivityIndicator size="small" color="#ff453a" />
+              <ActivityIndicator size="small" color="#dc2626" />
             ) : (
-              <Text style={styles.removeBtnText}>Remove from Passport</Text>
+              <Text style={styles.removeBtnText}>Remove from Explr</Text>
             )}
           </TouchableOpacity>
         ) : (
@@ -210,7 +210,7 @@ export default function AddPlacePanel({
             {saving ? (
               <ActivityIndicator size="small" color="#fff" />
             ) : (
-              <Text style={styles.addBtnText}>Add to Passport</Text>
+              <Text style={styles.addBtnText}>Add to Explr</Text>
             )}
           </TouchableOpacity>
         )}
@@ -220,20 +220,28 @@ export default function AddPlacePanel({
 
   // ── Search view ───────────────────────────────────────────────────────────
   return (
-    <BottomSheetScrollView
-      contentContainerStyle={styles.container}
+    <ScrollView
+      contentContainerStyle={[styles.container, { paddingBottom: Math.max(48, kbHeight + 20) }]}
       keyboardShouldPersistTaps="handled"
+      scrollEnabled={scrollEnabled}
+      scrollEventThrottle={16}
+      onScrollEndDrag={(e) => {
+        const { contentOffset, velocity } = e.nativeEvent;
+        if (contentOffset.y <= 0 && (velocity?.y ?? 0) < -0.3) {
+          onScrollEndDragAtTop(Math.abs(velocity?.y ?? 0));
+        }
+      }}
     >
-      <Text style={styles.subtitle}>Enter a city, landmark, or country</Text>
-
-      {/* Search field */}
+      {/* Search input */}
       <View style={styles.inputRow}>
-        <BottomSheetTextInput
+        <TextInput
           style={styles.input}
-          placeholder="Tokyo, Eiffel Tower, or Brazil"
-          placeholderTextColor="#9aa0a6"
+          placeholder="Search city, landmark, country…"
+          placeholderTextColor="#adb1b8"
           value={query}
           onChangeText={handleSearch}
+          onFocus={onSearchFocus}
+          onBlur={onSearchBlur}
           returnKeyType="search"
           autoCorrect={false}
           autoCapitalize="none"
@@ -241,11 +249,11 @@ export default function AddPlacePanel({
           clearButtonMode="never"
         />
         {searching ? (
-          <ActivityIndicator size="small" color="#9aa0a6" style={styles.inputEndSlot} />
+          <ActivityIndicator size="small" color="#adb1b8" style={styles.inputEndSlot} />
         ) : query.length > 0 ? (
-          <TouchableOpacity onPress={clearSearch} style={styles.clearBtnWrapper} hitSlop={6}>
+          <TouchableOpacity onPress={clearSearch} style={styles.clearBtnWrapper} hitSlop={4}>
             <View style={styles.clearBtnCircle}>
-              <Icon name="xmark" fallback="✕" size={10} color="#ffffff" weight="bold" />
+              <Text style={styles.clearBtnText}>✕</Text>
             </View>
           </TouchableOpacity>
         ) : null}
@@ -265,22 +273,15 @@ export default function AddPlacePanel({
                 key={item.place_id}
                 onPress={() => handleSelectResult(item)}
                 style={styles.resultRow}
-                activeOpacity={0.6}
+                activeOpacity={0.7}
               >
-                <View style={styles.resultIconCircle}>
-                  <Icon name="mappin" fallback="📍" size={15} color={BLUE} />
-                </View>
+                <View style={styles.resultPin} />
                 <View style={styles.resultText}>
-                  <Text style={styles.resultPrimary} numberOfLines={1}>
-                    {primary}
-                  </Text>
+                  <Text style={styles.resultPrimary} numberOfLines={1}>{primary}</Text>
                   {secondary ? (
-                    <Text style={styles.resultSecondary} numberOfLines={1}>
-                      {secondary}
-                    </Text>
+                    <Text style={styles.resultSecondary} numberOfLines={1}>{secondary}</Text>
                   ) : null}
                 </View>
-                <Icon name="chevron.right" fallback="›" size={13} color="#c6c9ce" />
               </TouchableOpacity>
             );
           })}
@@ -290,121 +291,133 @@ export default function AddPlacePanel({
       {/* Empty state */}
       {!searching && query.length > 2 && results.length === 0 && (
         <View style={styles.emptyState}>
-          <Icon name="magnifyingglass" fallback="🔍" size={26} color="#c6c9ce" />
-          <Text style={styles.emptyTitle}>No Results</Text>
-          <Text style={styles.emptyDesc}>
-            Try a city, landmark, or country name
+          <Text style={styles.emptyText}>No results for "{query}"</Text>
+        </View>
+      )}
+
+      {/* Idle hint */}
+      {query.length === 0 && (
+        <View style={styles.hintBox}>
+          <Text style={styles.hintText}>
+            Search for a city, landmark, or country to add it to your map.
           </Text>
         </View>
       )}
-    </BottomSheetScrollView>
+    </ScrollView>
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
-
 const styles = StyleSheet.create({
+  // ── Search view ────────────────────────────────────────────────────────────
   container: {
-    paddingHorizontal: 20,
-    paddingBottom: 64,
+    padding: 16,
   },
-  subtitle: {
-    fontSize: 14,
-    color: "#85898f",
-    marginBottom: 14,
-    marginTop: -6,
-  },
-
-  // Search field — Flighty's flat grey capsule field
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
-    borderRadius: 14,
-    backgroundColor: "#eff1f3",
-    paddingHorizontal: 16,
+    borderWidth: 1.5,
+    borderColor: "#e4e6e8",
+    borderRadius: 16,
+    backgroundColor: "#f7f8f9",
+    paddingHorizontal: 14,
+    marginBottom: 4,
   },
   input: {
     flex: 1,
-    paddingVertical: 15,
-    fontSize: 17,
-    color: "#0b0c0e",
+    paddingVertical: 14,
+    fontSize: 16,
+    color: "#111214",
   },
   inputEndSlot: {
     marginLeft: 8,
   },
   clearBtnWrapper: {
-    padding: 4,
+    padding: 6,
     marginLeft: 4,
   },
   clearBtnCircle: {
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: "#c6c9ce",
+    backgroundColor: "#c7c7cc",
     alignItems: "center",
     justifyContent: "center",
   },
-  errorText: {
-    marginTop: 10,
-    fontSize: 13,
-    color: "#ff453a",
+  clearBtnText: {
+    fontSize: 11,
+    color: "#ffffff",
+    fontWeight: "700",
+    lineHeight: 14,
+    marginTop: 1,
   },
-
-  // Results
+  errorText: {
+    marginTop: 8,
+    fontSize: 13,
+    color: "#dc2626",
+  },
   resultsList: {
-    marginTop: 14,
+    marginTop: 12,
+    borderRadius: 16,
+    overflow: "hidden",
+    backgroundColor: "#ffffff",
+    borderWidth: 1,
+    borderColor: "#f0f1f2",
   },
   resultRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingVertical: 12,
-    gap: 13,
+    paddingHorizontal: 14,
+    paddingVertical: 13,
+    borderBottomWidth: 1,
+    borderBottomColor: "#f7f8f9",
+    gap: 12,
   },
-  resultIconCircle: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "rgba(10,132,255,0.10)",
-    alignItems: "center",
-    justifyContent: "center",
+  resultPin: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: "#c7c7cc",
+    flexShrink: 0,
+    marginTop: 1,
   },
   resultText: {
     flex: 1,
   },
   resultPrimary: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#0b0c0e",
-    letterSpacing: -0.2,
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#111214",
   },
   resultSecondary: {
-    fontSize: 13,
-    color: "#85898f",
-    marginTop: 1,
+    fontSize: 12,
+    color: "#868c94",
+    marginTop: 2,
   },
-
-  // Empty state
   emptyState: {
-    marginTop: 48,
+    marginTop: 40,
     alignItems: "center",
-    gap: 6,
   },
-  emptyTitle: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#0b0c0e",
-    marginTop: 6,
+  emptyText: {
+    fontSize: 14,
+    color: "#868c94",
   },
-  emptyDesc: {
+  hintBox: {
+    marginTop: 20,
+    padding: 14,
+    backgroundColor: "#f7f8f9",
+    borderRadius: 12,
+  },
+  hintText: {
     fontSize: 13,
-    color: "#85898f",
+    color: "#868c94",
+    lineHeight: 19,
   },
 
-  // Selected place card
+  // ── Place card ─────────────────────────────────────────────────────────────
   placeCard: {
     flex: 1,
-    paddingHorizontal: 24,
-    paddingTop: 4,
+    paddingHorizontal: 20,
+    paddingTop: 6,
     paddingBottom: 32,
   },
   backBtn: {
@@ -413,13 +426,19 @@ const styles = StyleSheet.create({
     alignSelf: "flex-start",
     paddingVertical: 8,
     paddingRight: 12,
-    marginBottom: 16,
-    gap: 4,
+    marginBottom: 20,
+    gap: 2,
+  },
+  backArrow: {
+    fontSize: 22,
+    color: "#007aff",
+    lineHeight: 26,
+    fontWeight: "300",
   },
   backLabel: {
-    fontSize: 16,
-    color: BLUE,
-    fontWeight: "500",
+    fontSize: 15,
+    color: "#007aff",
+    fontWeight: "400",
   },
   placeInfo: {
     flexDirection: "row",
@@ -427,57 +446,58 @@ const styles = StyleSheet.create({
     gap: 14,
     marginBottom: 28,
   },
-  placeIconCircle: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "rgba(10,132,255,0.10)",
-    alignItems: "center",
-    justifyContent: "center",
+  pinDot: {
+    width: 14,
+    height: 14,
+    borderRadius: 7,
+    backgroundColor: "#2563eb",
+    marginTop: 5,
     flexShrink: 0,
+    shadowColor: "#2563eb",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.45,
+    shadowRadius: 6,
   },
   placeTextBlock: {
     flex: 1,
   },
   placeName: {
-    fontSize: 26,
-    fontWeight: "800",
-    color: "#0b0c0e",
-    letterSpacing: -0.6,
-    lineHeight: 31,
+    fontSize: 24,
+    fontWeight: "700",
+    color: "#111214",
+    letterSpacing: -0.4,
+    lineHeight: 30,
   },
   placeLocation: {
     fontSize: 14,
-    color: "#85898f",
+    color: "#868c94",
     marginTop: 4,
     lineHeight: 19,
   },
   addBtn: {
-    backgroundColor: BLUE,
-    borderRadius: 999,
+    backgroundColor: "#111214",
+    borderRadius: 16,
     paddingVertical: 16,
     alignItems: "center",
-    shadowColor: BLUE,
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 6,
   },
   addBtnText: {
     color: "#ffffff",
-    fontSize: 17,
-    fontWeight: "700",
+    fontSize: 16,
+    fontWeight: "600",
     letterSpacing: -0.2,
   },
   removeBtn: {
-    borderRadius: 999,
-    paddingVertical: 16,
+    marginTop: 10,
+    borderWidth: 1.5,
+    borderColor: "#fecaca",
+    borderRadius: 16,
+    paddingVertical: 14,
     alignItems: "center",
-    backgroundColor: "rgba(255,69,58,0.10)",
+    backgroundColor: "#fff5f5",
   },
   removeBtnText: {
-    fontSize: 16,
-    fontWeight: "600",
-    color: "#ff453a",
+    fontSize: 15,
+    fontWeight: "500",
+    color: "#dc2626",
   },
 });

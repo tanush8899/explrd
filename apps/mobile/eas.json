@@ -6,16 +6,35 @@
   "build": {
     "development": {
       "developmentClient": true,
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "APP_VARIANT": "development"
+      }
     },
     "preview": {
-      "distribution": "internal"
+      "distribution": "internal",
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://nkohsunxlnooveqpnjby.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_xQ1-0eY0vNKo429UQ0LA3w_RB-KVkxt",
+        "EXPO_PUBLIC_API_BASE_URL": "https://explrd.vercel.app/"
+      }
     },
     "production": {
-      "autoIncrement": true
+      "autoIncrement": true,
+      "env": {
+        "EXPO_PUBLIC_SUPABASE_URL": "https://nkohsunxlnooveqpnjby.supabase.co",
+        "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_xQ1-0eY0vNKo429UQ0LA3w_RB-KVkxt",
+        "EXPO_PUBLIC_API_BASE_URL": "https://explrd.vercel.app/"
+      }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "appleId": "tanush8899@gmail.com",
+        "ascAppId": "6762485826",
+        "appleTeamId": "MJ9X93RVH3"
+      }
+    }
   }
 }
