@@ -8,9 +8,13 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  StyleSheet,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { updatePassword } from "@/lib/auth";
+
+const BLUE = "#0a84ff";
 
 export default function ResetPasswordScreen() {
   const router = useRouter();
@@ -47,115 +51,178 @@ export default function ResetPasswordScreen() {
   }
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-card"
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
-    >
-      <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
-        keyboardShouldPersistTaps="handled"
+    <LinearGradient colors={["#0c1023", "#080b16", "#05070d"]} style={styles.root}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View className="flex-1 items-center justify-center px-6 py-12">
-          <Text className="text-3xl font-bold text-ink tracking-tight mb-2">
-            Explr
-          </Text>
-          <Text className="text-sm text-muted mb-10">
-            Track every place you've been.
-          </Text>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.content}>
+            <Text style={styles.wordmark}>Explr</Text>
+            <Text style={styles.tagline}>Track every place you've been.</Text>
 
-          <View className="w-full max-w-sm bg-white rounded-3xl shadow-sm p-6 gap-4">
-            <Text className="text-lg font-semibold text-ink">
-              New password
-            </Text>
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>New password</Text>
 
-            {done ? (
-              <View className="gap-4">
-                <Text className="text-sm text-muted leading-5">
-                  Your password has been updated. You can now sign in with your
-                  new password.
-                </Text>
-                <TouchableOpacity
-                  onPress={() => router.replace("/(auth)/login")}
-                  className="bg-ink rounded-2xl py-3.5 items-center"
-                >
-                  <Text className="text-white text-sm font-semibold">
-                    Back to sign in
+              {done ? (
+                <View style={{ gap: 16 }}>
+                  <Text style={styles.body}>
+                    Your password has been updated. You can now sign in with
+                    your new password.
                   </Text>
-                </TouchableOpacity>
-              </View>
-            ) : (
-              <>
-                {/* New password */}
-                <View className="gap-2">
-                  <Text className="text-xs font-medium text-muted uppercase tracking-wide">
-                    New password
-                  </Text>
-                  <View className="flex-row items-center border border-gray-200 rounded-xl bg-surface">
+                  <TouchableOpacity
+                    onPress={() => router.replace("/(auth)/login")}
+                    style={styles.submitBtn}
+                    activeOpacity={0.85}
+                  >
+                    <Text style={styles.submitText}>Back to Sign In</Text>
+                  </TouchableOpacity>
+                </View>
+              ) : (
+                <>
+                  {/* New password */}
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>NEW PASSWORD</Text>
+                    <View style={styles.passwordRow}>
+                      <TextInput
+                        value={password}
+                        onChangeText={setPassword}
+                        placeholder="••••••••"
+                        secureTextEntry={!showPassword}
+                        autoCapitalize="none"
+                        autoCorrect={false}
+                        returnKeyType="next"
+                        style={[styles.input, styles.passwordInput]}
+                        placeholderTextColor="#5a6070"
+                      />
+                      <TouchableOpacity
+                        onPress={() => setShowPassword((v) => !v)}
+                        style={styles.showBtn}
+                      >
+                        <Text style={styles.showBtnText}>
+                          {showPassword ? "Hide" : "Show"}
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </View>
+
+                  {/* Confirm password */}
+                  <View style={styles.fieldGroup}>
+                    <Text style={styles.fieldLabel}>CONFIRM PASSWORD</Text>
                     <TextInput
-                      value={password}
-                      onChangeText={setPassword}
+                      value={confirm}
+                      onChangeText={setConfirm}
                       placeholder="••••••••"
                       secureTextEntry={!showPassword}
                       autoCapitalize="none"
                       autoCorrect={false}
-                      returnKeyType="next"
-                      className="flex-1 px-4 py-3 text-sm text-ink"
-                      placeholderTextColor="#868c94"
+                      returnKeyType="done"
+                      onSubmitEditing={handleSubmit}
+                      style={styles.input}
+                      placeholderTextColor="#5a6070"
                     />
-                    <TouchableOpacity
-                      onPress={() => setShowPassword((v) => !v)}
-                      className="px-4 py-3"
-                    >
-                      <Text className="text-xs text-muted">
-                        {showPassword ? "Hide" : "Show"}
-                      </Text>
-                    </TouchableOpacity>
                   </View>
-                </View>
 
-                {/* Confirm password */}
-                <View className="gap-2">
-                  <Text className="text-xs font-medium text-muted uppercase tracking-wide">
-                    Confirm password
-                  </Text>
-                  <TextInput
-                    value={confirm}
-                    onChangeText={setConfirm}
-                    placeholder="••••••••"
-                    secureTextEntry={!showPassword}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    returnKeyType="done"
-                    onSubmitEditing={handleSubmit}
-                    className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-ink bg-surface"
-                    placeholderTextColor="#868c94"
-                  />
-                </View>
+                  {error ? <Text style={styles.error}>{error}</Text> : null}
 
-                {error ? (
-                  <Text className="text-xs text-red-500 text-center">
-                    {error}
-                  </Text>
-                ) : null}
-
-                <TouchableOpacity
-                  onPress={handleSubmit}
-                  disabled={submitting}
-                  className="bg-ink rounded-2xl py-3.5 items-center mt-1"
-                >
-                  {submitting ? (
-                    <ActivityIndicator size="small" color="white" />
-                  ) : (
-                    <Text className="text-white text-sm font-semibold">
-                      Update password
-                    </Text>
-                  )}
-                </TouchableOpacity>
-              </>
-            )}
+                  <TouchableOpacity
+                    onPress={handleSubmit}
+                    disabled={submitting}
+                    style={styles.submitBtn}
+                    activeOpacity={0.85}
+                  >
+                    {submitting ? (
+                      <ActivityIndicator size="small" color="white" />
+                    ) : (
+                      <Text style={styles.submitText}>Update Password</Text>
+                    )}
+                  </TouchableOpacity>
+                </>
+              )}
+            </View>
           </View>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  flex: { flex: 1 },
+  scroll: { flexGrow: 1 },
+  content: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 48,
+  },
+  wordmark: {
+    fontSize: 40,
+    fontWeight: "800",
+    letterSpacing: -1.2,
+    color: "#ffffff",
+    marginBottom: 6,
+  },
+  tagline: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.55)",
+    marginBottom: 40,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 28,
+    padding: 24,
+    gap: 16,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: -0.4,
+    color: "#ffffff",
+  },
+  body: { fontSize: 14, lineHeight: 20, color: "rgba(255,255,255,0.7)" },
+  fieldGroup: { gap: 8 },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 1.2,
+    color: "rgba(255,255,255,0.5)",
+  },
+  input: {
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    fontSize: 15,
+    color: "#ffffff",
+  },
+  passwordRow: { flexDirection: "row", alignItems: "center" },
+  passwordInput: { flex: 1, paddingRight: 64 },
+  showBtn: {
+    position: "absolute",
+    right: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  showBtnText: { fontSize: 12, color: "rgba(255,255,255,0.5)" },
+  error: { fontSize: 12, color: "#ff6961", textAlign: "center" },
+  submitBtn: {
+    backgroundColor: BLUE,
+    borderRadius: 999,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginTop: 2,
+  },
+  submitText: { color: "#ffffff", fontSize: 16, fontWeight: "700" },
+});

@@ -1,7 +1,7 @@
 import React, { forwardRef } from "react";
 import { View, Text, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import ViewShot from "react-native-view-shot";
+import ViewShot, { type ViewShotRef } from "react-native-view-shot";
 import type { ExplrdStats } from "@explrd/shared";
 
 export type PassportCardProps = {
@@ -10,7 +10,7 @@ export type PassportCardProps = {
 };
 
 // forwardRef so SharePanel can call .capture() on the ViewShot inside
-const PassportCard = forwardRef<ViewShot, PassportCardProps>(
+const PassportCard = forwardRef<ViewShotRef, PassportCardProps>(
   ({ displayName, stats }, ref) => {
     const pct = Math.min(Math.round(stats.percentWorldTraveled), 100);
     const today = new Date().toLocaleDateString("en-US", {

@@ -12,12 +12,15 @@ import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import * as Sharing from "expo-sharing";
 import * as MediaLibrary from "expo-media-library";
 import * as Clipboard from "expo-clipboard";
-import ViewShot from "react-native-view-shot";
+import { type ViewShotRef } from "react-native-view-shot";
 import { getExplrdStats } from "@explrd/shared";
 import type { SavedPlace } from "@explrd/shared";
 import { useSession } from "@/lib/SessionContext";
 import PassportCard from "@/components/PassportCard";
+import { Icon } from "@/components/Glass";
 import { generateShareLink } from "@/lib/api";
+
+const BLUE = "#0a84ff";
 
 type Props = {
   places: SavedPlace[];
@@ -25,7 +28,7 @@ type Props = {
 
 export default function SharePanel({ places }: Props) {
   const { session, user } = useSession();
-  const shotRef = useRef<ViewShot>(null);
+  const shotRef = useRef<ViewShotRef>(null);
   const [capturing, setCapturing] = useState(false);
   const [linkLoading, setLinkLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
@@ -43,7 +46,7 @@ export default function SharePanel({ places }: Props) {
 
   const captureCard = async (): Promise<string> => {
     if (!shotRef.current) throw new Error("Card not ready");
-    return (shotRef.current as ViewShot).capture();
+    return shotRef.current.capture();
   };
 
   // ── Share as image ──────────────────────────────────────────────────────────
@@ -112,8 +115,6 @@ export default function SharePanel({ places }: Props) {
 
   return (
     <BottomSheetScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>Share Your Passport</Text>
-
       {/* Passport card preview */}
       <View style={styles.cardWrapper}>
         <PassportCard ref={shotRef} displayName={displayName} stats={stats} />
@@ -122,6 +123,7 @@ export default function SharePanel({ places }: Props) {
       {/* Toast */}
       {toast && (
         <View style={styles.toast}>
+          <Icon name="checkmark.circle.fill" fallback="✓" size={16} color="#30d158" />
           <Text style={styles.toastText}>{toast}</Text>
         </View>
       )}
@@ -133,24 +135,34 @@ export default function SharePanel({ places }: Props) {
         </Text>
       )}
 
-      {/* Action buttons */}
+      {/* Action buttons — Flighty blue pills */}
       <View style={styles.actions}>
         <ActionButton
-          label="Share Passport Image"
+          label="Share Passport"
+          icon="square.and.arrow.up"
+          fallbackIcon="↑"
           onPress={handleSharePassport}
           loading={capturing}
           primary
         />
-        <ActionButton
-          label="Save to Photos"
-          onPress={handleSavePhoto}
-          loading={capturing}
-        />
-        <ActionButton
-          label="Copy & Share Link"
-          onPress={handleShareLink}
-          loading={linkLoading}
-        />
+        <View style={styles.secondaryRow}>
+          <ActionButton
+            label="Save to Photos"
+            icon="square.and.arrow.down"
+            fallbackIcon="↓"
+            onPress={handleSavePhoto}
+            loading={capturing}
+            compact
+          />
+          <ActionButton
+            label="Copy Link"
+            icon="link"
+            fallbackIcon="🔗"
+            onPress={handleShareLink}
+            loading={linkLoading}
+            compact
+          />
+        </View>
       </View>
     </BottomSheetScrollView>
   );
@@ -160,27 +172,51 @@ export default function SharePanel({ places }: Props) {
 
 function ActionButton({
   label,
+  icon,
+  fallbackIcon,
   onPress,
   loading,
   primary = false,
+  compact = false,
 }: {
   label: string;
+  icon: React.ComponentProps<typeof Icon>["name"];
+  fallbackIcon: string;
   onPress: () => void;
   loading: boolean;
   primary?: boolean;
+  compact?: boolean;
 }) {
   return (
     <TouchableOpacity
       onPress={onPress}
       disabled={loading}
-      style={[styles.actionBtn, primary ? styles.actionBtnPrimary : styles.actionBtnSecondary]}
+      activeOpacity={0.8}
+      style={[
+        styles.actionBtn,
+        primary ? styles.actionBtnPrimary : styles.actionBtnSecondary,
+        compact && styles.actionBtnCompact,
+      ]}
     >
       {loading ? (
-        <ActivityIndicator size="small" color={primary ? "#fff" : "#868c94"} />
+        <ActivityIndicator size="small" color={primary ? "#fff" : "#3c3f44"} />
       ) : (
-        <Text style={[styles.actionBtnText, primary ? styles.actionBtnTextPrimary : styles.actionBtnTextSecondary]}>
-          {label}
-        </Text>
+        <>
+          <Icon
+            name={icon}
+            fallback={fallbackIcon}
+            size={16}
+            color={primary ? "#ffffff" : "#3c3f44"}
+          />
+          <Text
+            style={[
+              styles.actionBtnText,
+              primary ? styles.actionBtnTextPrimary : styles.actionBtnTextSecondary,
+            ]}
+          >
+            {label}
+          </Text>
+        </>
       )}
     </TouchableOpacity>
   );
@@ -189,52 +225,61 @@ function ActionButton({
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  title: { fontSize: 16, fontWeight: "600", color: "#111214", marginBottom: 16 },
+  container: { paddingHorizontal: 20, paddingBottom: 140 },
 
   cardWrapper: {
     borderRadius: 20,
     overflow: "hidden",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.15,
+    shadowColor: "#1a1040",
+    shadowOffset: { width: 0, height: 10 },
+    shadowOpacity: 0.25,
     shadowRadius: 24,
-    elevation: 8,
-    marginBottom: 16,
+    elevation: 10,
+    marginBottom: 20,
   },
 
   toast: {
-    backgroundColor: "#f0fdf4",
-    borderWidth: 1,
-    borderColor: "#bbf7d0",
-    borderRadius: 12,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: "rgba(48,209,88,0.10)",
+    borderRadius: 14,
     paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingVertical: 11,
     marginBottom: 12,
   },
-  toastText: { fontSize: 13, fontWeight: "500", color: "#166534" },
+  toastText: { fontSize: 13, fontWeight: "600", color: "#1f7a36" },
 
   emptyHint: {
     fontSize: 13,
-    color: "#868c94",
+    color: "#85898f",
     textAlign: "center",
     marginBottom: 12,
   },
 
   actions: { gap: 10 },
+  secondaryRow: { flexDirection: "row", gap: 10 },
   actionBtn: {
-    borderRadius: 18,
-    paddingVertical: 15,
+    flexDirection: "row",
+    gap: 8,
+    borderRadius: 999,
+    paddingVertical: 16,
     alignItems: "center",
     justifyContent: "center",
   },
-  actionBtnPrimary: { backgroundColor: "#111214" },
-  actionBtnSecondary: {
-    backgroundColor: "#f7f8f9",
-    borderWidth: 1,
-    borderColor: "#e4e6e8",
+  actionBtnCompact: { flex: 1, paddingVertical: 14 },
+  actionBtnPrimary: {
+    backgroundColor: BLUE,
+    shadowColor: BLUE,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.3,
+    shadowRadius: 12,
+    elevation: 6,
   },
-  actionBtnText: { fontSize: 14, fontWeight: "600" },
+  actionBtnSecondary: {
+    backgroundColor: "#eff1f3",
+  },
+  actionBtnText: { fontSize: 15, fontWeight: "700", letterSpacing: -0.2 },
   actionBtnTextPrimary: { color: "#ffffff" },
-  actionBtnTextSecondary: { color: "#111214" },
+  actionBtnTextSecondary: { color: "#3c3f44" },
 });

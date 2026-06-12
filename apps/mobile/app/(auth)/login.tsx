@@ -8,8 +8,10 @@ import {
   Platform,
   ActivityIndicator,
   ScrollView,
+  StyleSheet,
 } from "react-native";
 import { useRouter } from "expo-router";
+import { LinearGradient } from "expo-linear-gradient";
 import { useSession } from "@/lib/SessionContext";
 import {
   signInWithEmail,
@@ -18,6 +20,8 @@ import {
 } from "@/lib/auth";
 
 type Mode = "login" | "signup";
+
+const BLUE = "#0a84ff";
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -72,156 +76,274 @@ export default function LoginScreen() {
 
   if (loading) {
     return (
-      <View className="flex-1 items-center justify-center bg-card">
-        <ActivityIndicator size="large" color="#111214" />
+      <View style={styles.loadingRoot}>
+        <ActivityIndicator size="large" color="#ffffff" />
       </View>
     );
   }
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-card"
-      behavior={Platform.OS === "ios" ? "padding" : "height"}
+    <LinearGradient
+      colors={["#0c1023", "#080b16", "#05070d"]}
+      style={styles.root}
     >
-      <ScrollView
-        contentContainerStyle={{ flexGrow: 1 }}
-        keyboardShouldPersistTaps="handled"
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
       >
-        <View className="flex-1 items-center justify-center px-6 py-12">
-          {/* Logo / wordmark */}
-          <Text className="text-3xl font-bold text-ink tracking-tight mb-2">
-            Explr
-          </Text>
-          <Text className="text-sm text-muted mb-10">
-            Track every place you've been.
-          </Text>
+        <ScrollView
+          contentContainerStyle={styles.scroll}
+          keyboardShouldPersistTaps="handled"
+        >
+          <View style={styles.content}>
+            {/* Logo / wordmark */}
+            <Text style={styles.wordmark}>Explr</Text>
+            <Text style={styles.tagline}>Track every place you've been.</Text>
 
-          {/* Card */}
-          <View className="w-full max-w-sm bg-white rounded-3xl shadow-sm p-6 gap-4">
-            <Text className="text-lg font-semibold text-ink">
-              {mode === "login" ? "Welcome back" : "Create account"}
-            </Text>
-
-            {/* Google button */}
-            <TouchableOpacity
-              onPress={handleGoogleSignIn}
-              disabled={googleLoading || submitting}
-              className="flex-row items-center justify-center gap-3 border border-gray-200 rounded-2xl py-3.5 px-4"
-            >
-              {googleLoading ? (
-                <ActivityIndicator size="small" color="#111214" />
-              ) : (
-                <>
-                  {/* Google "G" in brand colours */}
-                  <Text style={{ fontSize: 16, fontWeight: "700", color: "#4285F4" }}>G</Text>
-                  <Text className="text-sm font-medium text-ink">
-                    Continue with Google
-                  </Text>
-                </>
-              )}
-            </TouchableOpacity>
-
-            {/* Divider */}
-            <View className="flex-row items-center gap-3">
-              <View className="flex-1 h-px bg-gray-100" />
-              <Text className="text-xs text-muted">or</Text>
-              <View className="flex-1 h-px bg-gray-100" />
-            </View>
-
-            {/* Email */}
-            <View className="gap-2">
-              <Text className="text-xs font-medium text-muted uppercase tracking-wide">
-                Email
+            {/* Glass card */}
+            <View style={styles.card}>
+              <Text style={styles.cardTitle}>
+                {mode === "login" ? "Welcome back" : "Create account"}
               </Text>
-              <TextInput
-                value={email}
-                onChangeText={setEmail}
-                placeholder="you@example.com"
-                keyboardType="email-address"
-                autoCapitalize="none"
-                autoCorrect={false}
-                returnKeyType="next"
-                className="border border-gray-200 rounded-xl px-4 py-3 text-sm text-ink bg-surface"
-                placeholderTextColor="#868c94"
-              />
-            </View>
 
-            {/* Password */}
-            <View className="gap-2">
-              <View className="flex-row items-center justify-between">
-                <Text className="text-xs font-medium text-muted uppercase tracking-wide">
-                  Password
-                </Text>
-                {mode === "login" && (
-                  <TouchableOpacity onPress={() => router.push("/(auth)/forgot-password")}>
-                    <Text className="text-xs text-muted">Forgot password?</Text>
-                  </TouchableOpacity>
+              {/* Google button */}
+              <TouchableOpacity
+                onPress={handleGoogleSignIn}
+                disabled={googleLoading || submitting}
+                style={styles.googleBtn}
+                activeOpacity={0.85}
+              >
+                {googleLoading ? (
+                  <ActivityIndicator size="small" color="#111214" />
+                ) : (
+                  <>
+                    <Text style={styles.googleG}>G</Text>
+                    <Text style={styles.googleLabel}>Continue with Google</Text>
+                  </>
                 )}
+              </TouchableOpacity>
+
+              {/* Divider */}
+              <View style={styles.dividerRow}>
+                <View style={styles.dividerLine} />
+                <Text style={styles.dividerText}>or</Text>
+                <View style={styles.dividerLine} />
               </View>
-              <View className="flex-row items-center border border-gray-200 rounded-xl bg-surface">
+
+              {/* Email */}
+              <View style={styles.fieldGroup}>
+                <Text style={styles.fieldLabel}>EMAIL</Text>
                 <TextInput
-                  value={password}
-                  onChangeText={setPassword}
-                  placeholder="••••••••"
-                  secureTextEntry={!showPassword}
+                  value={email}
+                  onChangeText={setEmail}
+                  placeholder="you@example.com"
+                  keyboardType="email-address"
                   autoCapitalize="none"
                   autoCorrect={false}
-                  returnKeyType="done"
-                  onSubmitEditing={handleEmailSubmit}
-                  className="flex-1 px-4 py-3 text-sm text-ink"
-                  placeholderTextColor="#868c94"
+                  returnKeyType="next"
+                  style={styles.input}
+                  placeholderTextColor="#5a6070"
                 />
-                <TouchableOpacity
-                  onPress={() => setShowPassword((v) => !v)}
-                  className="px-4 py-3"
-                >
-                  <Text className="text-xs text-muted">
-                    {showPassword ? "Hide" : "Show"}
-                  </Text>
-                </TouchableOpacity>
               </View>
+
+              {/* Password */}
+              <View style={styles.fieldGroup}>
+                <View style={styles.fieldLabelRow}>
+                  <Text style={styles.fieldLabel}>PASSWORD</Text>
+                  {mode === "login" && (
+                    <TouchableOpacity
+                      onPress={() => router.push("/(auth)/forgot-password")}
+                    >
+                      <Text style={styles.forgotLink}>Forgot password?</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+                <View style={styles.passwordRow}>
+                  <TextInput
+                    value={password}
+                    onChangeText={setPassword}
+                    placeholder="••••••••"
+                    secureTextEntry={!showPassword}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    returnKeyType="done"
+                    onSubmitEditing={handleEmailSubmit}
+                    style={[styles.input, styles.passwordInput]}
+                    placeholderTextColor="#5a6070"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowPassword((v) => !v)}
+                    style={styles.showBtn}
+                  >
+                    <Text style={styles.showBtnText}>
+                      {showPassword ? "Hide" : "Show"}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {/* Error */}
+              {error ? <Text style={styles.error}>{error}</Text> : null}
+
+              {/* Submit */}
+              <TouchableOpacity
+                onPress={handleEmailSubmit}
+                disabled={submitting || googleLoading}
+                style={styles.submitBtn}
+                activeOpacity={0.85}
+              >
+                {submitting ? (
+                  <ActivityIndicator size="small" color="white" />
+                ) : (
+                  <Text style={styles.submitText}>
+                    {mode === "login" ? "Sign In" : "Create Account"}
+                  </Text>
+                )}
+              </TouchableOpacity>
             </View>
 
-            {/* Error */}
-            {error ? (
-              <Text className="text-xs text-red-500 text-center">{error}</Text>
-            ) : null}
-
-            {/* Submit */}
+            {/* Mode toggle */}
             <TouchableOpacity
-              onPress={handleEmailSubmit}
-              disabled={submitting || googleLoading}
-              className="bg-ink rounded-2xl py-3.5 items-center mt-1"
+              onPress={() => {
+                setMode((m) => (m === "login" ? "signup" : "login"));
+                setError(null);
+              }}
+              style={styles.toggle}
             >
-              {submitting ? (
-                <ActivityIndicator size="small" color="white" />
-              ) : (
-                <Text className="text-white text-sm font-semibold">
-                  {mode === "login" ? "Sign in" : "Create account"}
+              <Text style={styles.toggleText}>
+                {mode === "login"
+                  ? "Don't have an account? "
+                  : "Already have an account? "}
+                <Text style={styles.toggleAction}>
+                  {mode === "login" ? "Sign up" : "Sign in"}
                 </Text>
-              )}
+              </Text>
             </TouchableOpacity>
           </View>
-
-          {/* Mode toggle */}
-          <TouchableOpacity
-            onPress={() => {
-              setMode((m) => (m === "login" ? "signup" : "login"));
-              setError(null);
-            }}
-            className="mt-6"
-          >
-            <Text className="text-sm text-muted">
-              {mode === "login"
-                ? "Don't have an account? "
-                : "Already have an account? "}
-              <Text className="text-ink font-medium">
-                {mode === "login" ? "Sign up" : "Sign in"}
-              </Text>
-            </Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </KeyboardAvoidingView>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </LinearGradient>
   );
 }
+
+const styles = StyleSheet.create({
+  root: { flex: 1 },
+  flex: { flex: 1 },
+  loadingRoot: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#06080d",
+  },
+  scroll: { flexGrow: 1 },
+  content: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    paddingVertical: 48,
+  },
+
+  wordmark: {
+    fontSize: 40,
+    fontWeight: "800",
+    letterSpacing: -1.2,
+    color: "#ffffff",
+    marginBottom: 6,
+  },
+  tagline: {
+    fontSize: 14,
+    color: "rgba(255,255,255,0.55)",
+    marginBottom: 40,
+  },
+
+  // Frosted dark card
+  card: {
+    width: "100%",
+    maxWidth: 380,
+    backgroundColor: "rgba(255,255,255,0.06)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.10)",
+    borderRadius: 28,
+    padding: 24,
+    gap: 16,
+  },
+  cardTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    letterSpacing: -0.4,
+    color: "#ffffff",
+  },
+
+  googleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 10,
+    backgroundColor: "#ffffff",
+    borderRadius: 999,
+    paddingVertical: 14,
+  },
+  googleG: { fontSize: 16, fontWeight: "700", color: "#4285F4" },
+  googleLabel: { fontSize: 15, fontWeight: "600", color: "#111214" },
+
+  dividerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
+  dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.10)" },
+  dividerText: { fontSize: 12, color: "rgba(255,255,255,0.4)" },
+
+  fieldGroup: { gap: 8 },
+  fieldLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  fieldLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    letterSpacing: 1.2,
+    color: "rgba(255,255,255,0.5)",
+  },
+  forgotLink: { fontSize: 12, color: BLUE },
+  input: {
+    backgroundColor: "rgba(255,255,255,0.07)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.08)",
+    borderRadius: 14,
+    paddingHorizontal: 16,
+    paddingVertical: 13,
+    fontSize: 15,
+    color: "#ffffff",
+  },
+  passwordRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  passwordInput: { flex: 1, paddingRight: 64 },
+  showBtn: {
+    position: "absolute",
+    right: 4,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+  },
+  showBtnText: { fontSize: 12, color: "rgba(255,255,255,0.5)" },
+
+  error: { fontSize: 12, color: "#ff6961", textAlign: "center" },
+
+  submitBtn: {
+    backgroundColor: BLUE,
+    borderRadius: 999,
+    paddingVertical: 15,
+    alignItems: "center",
+    marginTop: 2,
+    shadowColor: BLUE,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.35,
+    shadowRadius: 14,
+    elevation: 6,
+  },
+  submitText: { color: "#ffffff", fontSize: 16, fontWeight: "700" },
+
+  toggle: { marginTop: 28 },
+  toggleText: { fontSize: 14, color: "rgba(255,255,255,0.55)" },
+  toggleAction: { color: "#ffffff", fontWeight: "600" },
+});

@@ -4,6 +4,8 @@ import {
   Text,
   TouchableOpacity,
   ActivityIndicator,
+  Alert,
+  Keyboard,
   StyleSheet,
 } from "react-native";
 import BottomSheet, {
@@ -13,40 +15,58 @@ import BottomSheet, {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSession } from "@/lib/SessionContext";
 import { signOut } from "@/lib/auth";
-import { fetchMyPlaces, deletePin } from "@/lib/api";
+import { fetchMyPlaces, deletePin, type GeoResult } from "@/lib/api";
 import AddPlacePanel from "@/components/BottomSheet/AddPlacePanel";
 import MyPlacesPanel from "@/components/BottomSheet/MyPlacesPanel";
 import SharePanel from "@/components/BottomSheet/SharePanel";
-import PlacesMap from "@/components/PlacesMap";
+import PlacesMap, { type PlacesMapHandle } from "@/components/PlacesMap";
+import { GlassSurface, Icon } from "@/components/Glass";
 import type { SavedPlace } from "@explrd/shared";
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
-type Tab = "add" | "places" | "share";
+type Tab = "places" | "passport" | "add";
 
-const TABS: Array<{ key: Tab; label: string }> = [
-  { key: "add", label: "Add" },
-  { key: "places", label: "My Places" },
-  { key: "share", label: "Share" },
-];
+const SNAP_POINTS = ["24%", "48%", "93%"];
 
-// snap indices: 0 = 30%, 1 = 55%, 2 = 95%
-const SNAP_POINTS = ["30%", "55%", "95%"];
-const TAB_SNAP: Record<Tab, number> = { add: 0, places: 1, share: 1 };
+const TAB_TITLES: Record<Tab, string> = {
+  places: "My Places",
+  passport: "Passport",
+  add: "Add Place",
+};
+
+const BLUE = "#0a84ff";
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function MainScreen() {
-  const { session } = useSession();
+  const { session, user } = useSession();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<BottomSheet>(null);
+  const mapRef = useRef<PlacesMapHandle>(null);
 
   const [places, setPlaces] = useState<SavedPlace[]>([]);
   const [loadingPlaces, setLoadingPlaces] = useState(true);
   const [activeTab, setActiveTab] = useState<Tab>("places");
   const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [preview, setPreview] = useState<{
+    lat: number;
+    lng: number;
+    label: string;
+  } | null>(null);
 
   const snapPoints = useMemo(() => SNAP_POINTS, []);
+
+  const displayName =
+    (user?.user_metadata?.full_name as string | undefined) ??
+    user?.email?.split("@")[0] ??
+    "Explorer";
+  const initials = displayName
+    .split(/[\s._-]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((s) => s[0]!.toUpperCase())
+    .join("");
 
   // ── Load places ─────────────────────────────────────────────────────────────
   const loadPlaces = useCallback(async () => {
@@ -65,21 +85,40 @@ export default function MainScreen() {
     loadPlaces();
   }, [loadPlaces]);
 
-  // ── Tab switching ────────────────────────────────────────────────────────────
-  const handleTabPress = (tab: Tab) => {
+  // ── Navigation between panels ───────────────────────────────────────────────
+  const openTab = (tab: Tab) => {
     setActiveTab(tab);
-    sheetRef.current?.snapToIndex(TAB_SNAP[tab]);
+    if (tab === "add") {
+      sheetRef.current?.snapToIndex(2);
+    } else {
+      setPreview(null);
+      sheetRef.current?.snapToIndex(1);
+    }
   };
 
-  // Expand to 95% when search is focused
-  const handleSearchFocus = useCallback(
-    () => sheetRef.current?.snapToIndex(2),
-    []
-  );
-  const handleSearchBlur = useCallback(
-    () => sheetRef.current?.snapToIndex(0),
-    []
-  );
+  const closeAdd = () => {
+    Keyboard.dismiss();
+    setPreview(null);
+    mapRef.current?.fitAll();
+    openTab("places");
+  };
+
+  // ── Map preview while searching ─────────────────────────────────────────────
+  const handleSelectPlace = useCallback((result: GeoResult) => {
+    setPreview({
+      lat: result.lat,
+      lng: result.lng,
+      label: result.display_name.split(",")[0].trim(),
+    });
+    mapRef.current?.focusOn(result.lat, result.lng);
+    // Drop the sheet so the map fly-to is visible behind it.
+    sheetRef.current?.snapToIndex(1);
+  }, []);
+
+  const handleDeselectPlace = useCallback(() => {
+    setPreview(null);
+    sheetRef.current?.snapToIndex(2);
+  }, []);
 
   // ── CRUD callbacks ───────────────────────────────────────────────────────────
   const handleSaved = useCallback(
@@ -111,6 +150,13 @@ export default function MainScreen() {
     [session?.access_token, deletingId]
   );
 
+  const handleAvatarPress = () => {
+    Alert.alert(displayName, user?.email ?? undefined, [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign Out", style: "destructive", onPress: () => signOut() },
+    ]);
+  };
+
   // ── Backdrop ─────────────────────────────────────────────────────────────────
   const renderBackdrop = useCallback(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -119,6 +165,7 @@ export default function MainScreen() {
         {...props}
         disappearsOnIndex={1}
         appearsOnIndex={2}
+        opacity={0.25}
         pressBehavior="collapse"
       />
     ),
@@ -127,26 +174,18 @@ export default function MainScreen() {
 
   // ─── Render ──────────────────────────────────────────────────────────────────
   return (
-    <View style={StyleSheet.absoluteFillObject}>
-      {/* ── Map ───────────────────────────────────────────────────────────── */}
-      <PlacesMap places={places} />
+    <View style={styles.root}>
+      {/* ── Satellite globe ────────────────────────────────────────────────── */}
+      <PlacesMap ref={mapRef} places={places} preview={preview} />
 
-      {/* Loading overlay — shown until first fetch completes */}
+      {/* Loading veil — shown until first fetch completes */}
       {loadingPlaces && (
         <View style={styles.loadingOverlay} pointerEvents="none">
-          <ActivityIndicator size="large" color="#868c94" />
+          <ActivityIndicator size="large" color="#ffffff" />
         </View>
       )}
 
-      {/* Sign-out pill — floats above the map */}
-      <TouchableOpacity
-        onPress={signOut}
-        style={[styles.signOutBtn, { top: insets.top + 12 }]}
-      >
-        <Text style={styles.signOutText}>Sign out</Text>
-      </TouchableOpacity>
-
-      {/* ── Bottom sheet ──────────────────────────────────────────────────── */}
+      {/* ── Floating sheet ─────────────────────────────────────────────────── */}
       <BottomSheet
         ref={sheetRef}
         index={1}
@@ -155,36 +194,44 @@ export default function MainScreen() {
         backdropComponent={renderBackdrop}
         handleIndicatorStyle={styles.sheetHandle}
         backgroundStyle={styles.sheetBackground}
+        style={styles.sheetContainer}
+        keyboardBehavior="extend"
+        keyboardBlurBehavior="restore"
+        android_keyboardInputMode="adjustResize"
       >
-        {/* Tab bar — fixed, non-scrollable header */}
-        <BottomSheetView style={styles.tabBar}>
-          {TABS.map((tab) => (
+        {/* Header — Flighty-style oversized title + avatar / close */}
+        <BottomSheetView style={styles.header}>
+          <Text style={styles.headerTitle}>{TAB_TITLES[activeTab]}</Text>
+          {activeTab === "add" ? (
             <TouchableOpacity
-              key={tab.key}
-              onPress={() => handleTabPress(tab.key)}
-              style={[
-                styles.tabBtn,
-                activeTab === tab.key && styles.tabBtnActive,
-              ]}
+              onPress={closeAdd}
+              style={styles.closeBtn}
+              hitSlop={8}
+              activeOpacity={0.7}
             >
-              <Text
-                style={[
-                  styles.tabText,
-                  activeTab === tab.key && styles.tabTextActive,
-                ]}
-              >
-                {tab.label}
-              </Text>
+              <Icon name="xmark" fallback="✕" size={15} color="#3c3f44" weight="bold" />
             </TouchableOpacity>
-          ))}
+          ) : (
+            <TouchableOpacity
+              onPress={handleAvatarPress}
+              style={styles.avatar}
+              hitSlop={8}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.avatarText}>{initials}</Text>
+            </TouchableOpacity>
+          )}
         </BottomSheetView>
 
-        {/* Panel — each manages its own BottomSheetScrollView internally */}
+        {/* Panels — all existing functionality, new clothes */}
         {activeTab === "add" && (
           <AddPlacePanel
+            places={places}
             onSaved={handleSaved}
-            onSearchFocus={handleSearchFocus}
-            onSearchBlur={handleSearchBlur}
+            onDelete={handleDelete}
+            onSelectPlace={handleSelectPlace}
+            onDeselectPlace={handleDeselectPlace}
+            onDone={closeAdd}
           />
         )}
         {activeTab === "places" && (
@@ -192,58 +239,205 @@ export default function MainScreen() {
             places={places}
             onDelete={handleDelete}
             deletingId={deletingId}
+            onAddPress={() => openTab("add")}
           />
         )}
-        {activeTab === "share" && <SharePanel places={places} />}
+        {activeTab === "passport" && <SharePanel places={places} />}
       </BottomSheet>
+
+      {/* ── Floating liquid-glass tab bar ──────────────────────────────────── */}
+      {activeTab !== "add" && (
+        <View
+          style={[styles.tabBarWrap, { bottom: Math.max(insets.bottom, 12) + 4 }]}
+          pointerEvents="box-none"
+        >
+          <GlassSurface style={styles.tabPill} interactive>
+            <TabButton
+              label="My Places"
+              icon="map.fill"
+              fallback="🗺"
+              active={activeTab === "places"}
+              onPress={() => openTab("places")}
+            />
+            <TabButton
+              label="Passport"
+              icon="wallet.pass.fill"
+              fallback="🛂"
+              active={activeTab === "passport"}
+              onPress={() => openTab("passport")}
+            />
+          </GlassSurface>
+
+          <GlassSurface style={styles.searchCircle} interactive>
+            <TouchableOpacity
+              onPress={() => openTab("add")}
+              style={styles.searchTouch}
+              activeOpacity={0.8}
+            >
+              <Icon name="magnifyingglass" fallback="🔍" size={22} color="#1c1c1e" weight="semibold" />
+            </TouchableOpacity>
+          </GlassSurface>
+        </View>
+      )}
     </View>
+  );
+}
+
+// ─── Sub-components ───────────────────────────────────────────────────────────
+
+function TabButton({
+  label,
+  icon,
+  fallback,
+  active,
+  onPress,
+}: {
+  label: string;
+  icon: React.ComponentProps<typeof Icon>["name"];
+  fallback: string;
+  active: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[styles.tabBtn, active && styles.tabBtnActive]}
+      activeOpacity={0.8}
+    >
+      <Icon
+        name={icon}
+        fallback={fallback}
+        size={21}
+        color={active ? BLUE : "#5a5f66"}
+      />
+      <Text style={[styles.tabLabel, active && styles.tabLabelActive]}>
+        {label}
+      </Text>
+    </TouchableOpacity>
   );
 }
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 
+const ABSOLUTE_FILL = {
+  position: "absolute",
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+} as const;
+
 const styles = StyleSheet.create({
+  root: {
+    ...ABSOLUTE_FILL,
+    backgroundColor: "#06080d",
+  },
+
   loadingOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(232,234,237,0.7)",
+    ...ABSOLUTE_FILL,
+    backgroundColor: "rgba(6,8,13,0.45)",
     alignItems: "center",
     justifyContent: "center",
   },
 
-  signOutBtn: {
-    position: "absolute",
-    right: 16,
-    backgroundColor: "rgba(255,255,255,0.9)",
-    borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+  // Sheet
+  sheetContainer: {
     shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 3,
+    shadowOffset: { width: 0, height: -6 },
+    shadowOpacity: 0.18,
+    shadowRadius: 24,
+    elevation: 16,
   },
-  signOutText: { fontSize: 12, fontWeight: "500", color: "#111214" },
+  sheetBackground: {
+    backgroundColor: "#ffffff",
+    borderRadius: 44,
+  },
+  sheetHandle: {
+    backgroundColor: "#d8dadd",
+    width: 40,
+  },
 
-  sheetHandle: { backgroundColor: "#d1d5db" },
-  sheetBackground: { backgroundColor: "#ffffff" },
-
-  tabBar: {
+  // Header
+  header: {
     flexDirection: "row",
-    paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 12,
-    gap: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: "#f0f1f2",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingHorizontal: 24,
+    paddingTop: 2,
+    paddingBottom: 10,
+  },
+  headerTitle: {
+    fontSize: 32,
+    fontWeight: "800",
+    letterSpacing: -0.8,
+    color: "#0b0c0e",
+  },
+  avatar: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#ecd393",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  avatarText: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#5b4a17",
+  },
+  closeBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: "#f2f3f5",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  // Floating tab bar
+  tabBarWrap: {
+    position: "absolute",
+    left: 0,
+    right: 0,
+    flexDirection: "row",
+    justifyContent: "center",
+    alignItems: "center",
+    gap: 12,
+  },
+  tabPill: {
+    flexDirection: "row",
+    borderRadius: 999,
+    padding: 5,
+    gap: 2,
   },
   tabBtn: {
-    flex: 1,
-    paddingVertical: 8,
+    flexDirection: "column",
     alignItems: "center",
+    justifyContent: "center",
+    paddingVertical: 7,
+    paddingHorizontal: 22,
     borderRadius: 999,
+    gap: 2,
   },
-  tabBtnActive: { backgroundColor: "#111214" },
-  tabText: { fontSize: 13, fontWeight: "500", color: "#868c94" },
-  tabTextActive: { color: "#ffffff" },
+  tabBtnActive: {
+    backgroundColor: "rgba(10,132,255,0.14)",
+  },
+  tabLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: "#5a5f66",
+  },
+  tabLabelActive: {
+    color: BLUE,
+  },
+  searchCircle: {
+    width: 62,
+    height: 62,
+    borderRadius: 31,
+  },
+  searchTouch: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 });

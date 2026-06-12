@@ -2,6 +2,7 @@ import React, { useMemo, useState } from "react";
 import { View, Text, TouchableOpacity, Alert, StyleSheet } from "react-native";
 import { BottomSheetScrollView } from "@gorhom/bottom-sheet";
 import { LinearGradient } from "expo-linear-gradient";
+import { Icon } from "@/components/Glass";
 import { getExplrdStats, getPlaceHierarchy } from "@explrd/shared";
 import type { SavedPlace } from "@explrd/shared";
 
@@ -9,11 +10,17 @@ type Props = {
   places: SavedPlace[];
   onDelete: (placeId: string) => void;
   deletingId: string | null;
+  onAddPress: () => void;
 };
 
 type ExpandedState = Record<string, boolean>;
 
-export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
+export default function MyPlacesPanel({
+  places,
+  onDelete,
+  deletingId,
+  onAddPress,
+}: Props) {
   const [expanded, setExpanded] = useState<ExpandedState>({});
 
   const stats = useMemo(() => getExplrdStats(places), [places]);
@@ -24,29 +31,31 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
 
   const confirmDelete = (place: SavedPlace) => {
     const label = place.name ?? place.city ?? place.formatted ?? place.place_id;
-    Alert.alert(
-      "Remove Place",
-      `Remove "${label}" from your passport?`,
-      [
-        { text: "Cancel", style: "cancel" },
-        {
-          text: "Remove",
-          style: "destructive",
-          onPress: () => onDelete(place.place_id),
-        },
-      ]
-    );
+    Alert.alert("Remove Place", `Remove "${label}" from your passport?`, [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Remove",
+        style: "destructive",
+        onPress: () => onDelete(place.place_id),
+      },
+    ]);
   };
 
+  // ── Empty state — Flighty's "Let's Fly Somewhere" ───────────────────────────
   if (places.length === 0) {
     return (
       <BottomSheetScrollView contentContainerStyle={styles.container}>
-        <Text style={styles.title}>My Places</Text>
         <View style={styles.emptyBox}>
-          <Text style={styles.emptyTitle}>No places yet</Text>
-          <Text style={styles.emptyDesc}>
-            Switch to the Add tab to save your first city.
-          </Text>
+          <Text style={styles.emptyTitle}>Let's Explore Somewhere</Text>
+          <View style={styles.emptyHintRow}>
+            <Text style={styles.emptyDesc}>Tap </Text>
+            <TouchableOpacity onPress={onAddPress} hitSlop={8}>
+              <View style={styles.emptySearchChip}>
+                <Icon name="magnifyingglass" fallback="🔍" size={12} color="#ffffff" />
+              </View>
+            </TouchableOpacity>
+            <Text style={styles.emptyDesc}> Search to add your first place</Text>
+          </View>
         </View>
       </BottomSheetScrollView>
     );
@@ -54,45 +63,64 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
 
   return (
     <BottomSheetScrollView contentContainerStyle={styles.container}>
-      <Text style={styles.title}>My Places</Text>
-
-      {/* Stats pills */}
-      <View style={styles.statsRow}>
-        <StatPill label="Cities" value={stats.uniqueCities} />
-        <StatPill label="Countries" value={stats.uniqueCountries} />
-        <StatPill label="Continents" value={stats.uniqueContinents} />
-      </View>
-
-      {/* World explored progress */}
-      <View style={styles.worldBox}>
-        <View style={styles.worldBoxHeader}>
-          <Text style={styles.worldLabel}>World Explored</Text>
-          <Text style={styles.worldPct}>
-            {Math.round(stats.percentWorldTraveled)}%
-          </Text>
-        </View>
-        <View style={styles.progressTrack}>
-          <LinearGradient
-            colors={["#f7cf62", "#f2a8ff", "#76d5ff"]}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[
-              styles.progressFill,
-              {
-                width: `${Math.min(
-                  Math.round(stats.percentWorldTraveled),
-                  100
-                )}%`,
-              },
-            ]}
-          />
-        </View>
-        <Text style={styles.worldScore}>
-          Explorer Score: {stats.score.toLocaleString()}
+      {/* ── Passport summary card — Flighty's gradient stat card ───────────── */}
+      <LinearGradient
+        colors={["#2a1a58", "#16204b", "#0a0f1a"]}
+        start={{ x: 0.1, y: 0 }}
+        end={{ x: 0.9, y: 1 }}
+        style={styles.summaryCard}
+      >
+        <Text style={styles.summaryHeader}>ALL-TIME EXPLR PASSPORT</Text>
+        <Text style={styles.summarySubheader}>
+          ✦ PASSPORT • PASS • PASAPORTE
         </Text>
-      </View>
 
-      {/* Continent → Country → State → City hierarchy */}
+        <View style={styles.summaryGrid}>
+          <View style={styles.summaryCell}>
+            <Text style={styles.summaryLabel}>CITIES</Text>
+            <Text style={styles.summaryBig}>{stats.uniqueCities}</Text>
+          </View>
+          <View style={[styles.summaryCell, styles.summaryCellWide]}>
+            <Text style={styles.summaryLabel}>WORLD EXPLORED</Text>
+            <Text style={styles.summaryBig}>
+              {Math.round(stats.percentWorldTraveled)}
+              <Text style={styles.summaryUnit}>%</Text>
+            </Text>
+            <View style={styles.progressTrack}>
+              <LinearGradient
+                colors={["#f7cf62", "#f2a8ff", "#76d5ff"]}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 0 }}
+                style={[
+                  styles.progressFill,
+                  {
+                    width: `${Math.min(Math.round(stats.percentWorldTraveled), 100)}%`,
+                  },
+                ]}
+              />
+            </View>
+          </View>
+        </View>
+
+        <View style={styles.summaryGrid}>
+          <View style={styles.summaryCell}>
+            <Text style={styles.summaryLabel}>COUNTRIES</Text>
+            <Text style={styles.summaryMid}>{stats.uniqueCountries}</Text>
+          </View>
+          <View style={styles.summaryCell}>
+            <Text style={styles.summaryLabel}>CONTINENTS</Text>
+            <Text style={styles.summaryMid}>{stats.uniqueContinents}</Text>
+          </View>
+          <View style={styles.summaryCell}>
+            <Text style={styles.summaryLabel}>SCORE</Text>
+            <Text style={styles.summaryMid}>{stats.score.toLocaleString()}</Text>
+          </View>
+        </View>
+      </LinearGradient>
+
+      {/* ── Where you've been ──────────────────────────────────────────────── */}
+      <Text style={styles.sectionHeader}>Where You've Been</Text>
+
       {hierarchy.map((continent) => {
         const continentKey = `c:${continent.continent}`;
         const isOpen = !!expanded[continentKey];
@@ -102,6 +130,7 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
             <TouchableOpacity
               onPress={() => toggle(continentKey)}
               style={styles.continentRow}
+              activeOpacity={0.7}
             >
               <View style={styles.continentLeft}>
                 <Text style={styles.continentName}>{continent.continent}</Text>
@@ -111,7 +140,12 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
                   </Text>
                 </View>
               </View>
-              <Text style={styles.chevron}>{isOpen ? "▲" : "▼"}</Text>
+              <Icon
+                name={isOpen ? "chevron.up" : "chevron.down"}
+                fallback={isOpen ? "▲" : "▼"}
+                size={13}
+                color="#b3b8bf"
+              />
             </TouchableOpacity>
 
             {isOpen &&
@@ -124,12 +158,21 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
                     <TouchableOpacity
                       onPress={() => toggle(countryKey)}
                       style={styles.countryRow}
+                      activeOpacity={0.7}
                     >
                       <Text style={styles.countryName}>{country.country}</Text>
-                      <Text style={styles.countryMeta}>
-                        {country.exploredCities} cities{" "}
-                        {isCountryOpen ? "▲" : "▼"}
-                      </Text>
+                      <View style={styles.countryRight}>
+                        <Text style={styles.countryMeta}>
+                          {country.exploredCities}{" "}
+                          {country.exploredCities === 1 ? "city" : "cities"}
+                        </Text>
+                        <Icon
+                          name={isCountryOpen ? "chevron.up" : "chevron.down"}
+                          fallback={isCountryOpen ? "▲" : "▼"}
+                          size={11}
+                          color="#c6c9ce"
+                        />
+                      </View>
                     </TouchableOpacity>
 
                     {isCountryOpen &&
@@ -168,15 +211,6 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function StatPill({ label, value }: { label: string; value: number }) {
-  return (
-    <View style={styles.statPill}>
-      <Text style={styles.statValue}>{value}</Text>
-      <Text style={styles.statLabel}>{label}</Text>
-    </View>
-  );
-}
-
 function PlaceRow({
   place,
   onDelete,
@@ -186,10 +220,10 @@ function PlaceRow({
   onDelete: (p: SavedPlace) => void;
   deleting: boolean;
 }) {
-  const label =
-    place.name ?? place.city ?? place.formatted ?? place.place_id;
+  const label = place.name ?? place.city ?? place.formatted ?? place.place_id;
   return (
     <View style={styles.placeRow}>
+      <View style={styles.placeDot} />
       <Text style={styles.placeLabel} numberOfLines={1}>
         {label}
       </Text>
@@ -202,7 +236,7 @@ function PlaceRow({
         {deleting ? (
           <Text style={styles.deleteBtnText}>…</Text>
         ) : (
-          <Text style={styles.deleteBtnText}>✕</Text>
+          <Icon name="xmark" fallback="✕" size={11} color="#b3b8bf" />
         )}
       </TouchableOpacity>
     </View>
@@ -212,141 +246,182 @@ function PlaceRow({
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 48 },
-  title: { fontSize: 16, fontWeight: "600", color: "#111214", marginBottom: 12 },
+  container: { paddingHorizontal: 20, paddingBottom: 140 },
 
-  // Stats row
-  statsRow: { flexDirection: "row", gap: 8, marginBottom: 12 },
-  statPill: {
-    flex: 1,
-    backgroundColor: "#f7f8f9",
-    borderWidth: 1,
-    borderColor: "#f0f1f2",
-    borderRadius: 14,
-    paddingVertical: 12,
-    alignItems: "center",
+  // Gradient summary card
+  summaryCard: {
+    borderRadius: 24,
+    padding: 20,
+    marginBottom: 24,
   },
-  statValue: { fontSize: 18, fontWeight: "700", color: "#111214" },
-  statLabel: { fontSize: 11, color: "#868c94", marginTop: 2 },
-
-  // World explored
-  worldBox: {
-    borderWidth: 1,
-    borderColor: "#f0f1f2",
-    borderRadius: 16,
-    padding: 14,
-    backgroundColor: "#ffffff",
-    marginBottom: 16,
+  summaryHeader: {
+    fontSize: 13,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    color: "#ffffff",
   },
-  worldBoxHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  worldLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#868c94",
-    textTransform: "uppercase",
+  summarySubheader: {
+    fontSize: 9,
     letterSpacing: 1,
+    color: "rgba(255,255,255,0.45)",
+    marginTop: 3,
+    marginBottom: 18,
   },
-  worldPct: { fontSize: 14, fontWeight: "700", color: "#111214" },
+  summaryGrid: {
+    flexDirection: "row",
+    gap: 18,
+    marginBottom: 14,
+  },
+  summaryCell: {
+    flex: 1,
+  },
+  summaryCellWide: {
+    flex: 1.6,
+  },
+  summaryLabel: {
+    fontSize: 10,
+    fontWeight: "600",
+    letterSpacing: 1.2,
+    color: "rgba(255,255,255,0.55)",
+    marginBottom: 4,
+  },
+  summaryBig: {
+    fontSize: 34,
+    fontWeight: "800",
+    letterSpacing: -1,
+    color: "#ffffff",
+  },
+  summaryUnit: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.8)",
+  },
+  summaryMid: {
+    fontSize: 22,
+    fontWeight: "700",
+    letterSpacing: -0.4,
+    color: "#ffffff",
+  },
   progressTrack: {
-    height: 6,
-    backgroundColor: "#f0f1f2",
+    height: 5,
+    backgroundColor: "rgba(255,255,255,0.12)",
     borderRadius: 3,
     overflow: "hidden",
-    marginBottom: 8,
+    marginTop: 8,
   },
   progressFill: { height: "100%", borderRadius: 3 },
-  worldScore: { fontSize: 11, color: "#868c94" },
 
-  // Continent
+  // Section
+  sectionHeader: {
+    fontSize: 20,
+    fontWeight: "800",
+    letterSpacing: -0.5,
+    color: "#0b0c0e",
+    marginBottom: 12,
+  },
+
+  // Continent card
   continentBlock: {
-    marginBottom: 4,
-    borderWidth: 1,
-    borderColor: "#f0f1f2",
-    borderRadius: 14,
+    marginBottom: 10,
+    borderRadius: 20,
     overflow: "hidden",
-    backgroundColor: "#ffffff",
+    backgroundColor: "#f6f7f8",
   },
   continentRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 16,
   },
-  continentLeft: { flexDirection: "row", alignItems: "center", gap: 8 },
-  continentName: { fontSize: 14, fontWeight: "600", color: "#111214" },
+  continentLeft: { flexDirection: "row", alignItems: "center", gap: 10 },
+  continentName: {
+    fontSize: 16,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    color: "#0b0c0e",
+  },
   badge: {
-    backgroundColor: "#f7f8f9",
+    backgroundColor: "rgba(10,132,255,0.10)",
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 9,
+    paddingVertical: 3,
   },
-  badgeText: { fontSize: 11, color: "#868c94" },
-  chevron: { fontSize: 10, color: "#868c94" },
+  badgeText: { fontSize: 11, fontWeight: "600", color: "#0a84ff" },
 
   // Country
   countryBlock: {
     borderTopWidth: 1,
-    borderTopColor: "#f7f8f9",
+    borderTopColor: "rgba(0,0,0,0.05)",
   },
   countryRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: "#fafbfc",
+    paddingHorizontal: 18,
+    paddingVertical: 12,
   },
-  countryName: { fontSize: 13, color: "#111214" },
-  countryMeta: { fontSize: 12, color: "#868c94" },
+  countryName: { fontSize: 14, fontWeight: "600", color: "#23262b" },
+  countryRight: { flexDirection: "row", alignItems: "center", gap: 8 },
+  countryMeta: { fontSize: 12, color: "#85898f" },
 
   // State
-  stateBlock: { paddingLeft: 8 },
+  stateBlock: { paddingBottom: 4 },
   stateLabel: {
     fontSize: 11,
-    fontWeight: "500",
-    color: "#868c94",
-    paddingHorizontal: 20,
-    paddingTop: 8,
-    paddingBottom: 4,
+    fontWeight: "600",
+    color: "#85898f",
+    paddingHorizontal: 24,
+    paddingTop: 6,
+    paddingBottom: 2,
     textTransform: "uppercase",
-    letterSpacing: 0.5,
+    letterSpacing: 0.8,
   },
 
   // Place row
   placeRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: "#f7f8f9",
+    paddingHorizontal: 24,
+    paddingVertical: 9,
+    gap: 10,
   },
-  placeLabel: { flex: 1, fontSize: 13, color: "#3d4249" },
-  deleteBtn: { marginLeft: 12, paddingHorizontal: 4 },
-  deleteBtnText: { fontSize: 12, color: "#868c94" },
+  placeDot: {
+    width: 6,
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "#0a84ff",
+  },
+  placeLabel: { flex: 1, fontSize: 14, color: "#3d4249" },
+  deleteBtn: { marginLeft: 12, padding: 2 },
+  deleteBtnText: { fontSize: 12, color: "#b3b8bf" },
 
   // Empty
   emptyBox: {
-    marginTop: 24,
-    padding: 24,
+    marginTop: 56,
     alignItems: "center",
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "#e4e6e8",
-    borderRadius: 16,
+    gap: 10,
   },
-  emptyTitle: { fontSize: 14, fontWeight: "600", color: "#3d4249" },
+  emptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    letterSpacing: -0.3,
+    color: "#5a5f66",
+  },
+  emptyHintRow: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
   emptyDesc: {
-    fontSize: 13,
-    color: "#868c94",
-    marginTop: 6,
-    textAlign: "center",
-    lineHeight: 19,
+    fontSize: 14,
+    color: "#85898f",
+  },
+  emptySearchChip: {
+    width: 22,
+    height: 22,
+    borderRadius: 11,
+    backgroundColor: "#85898f",
+    alignItems: "center",
+    justifyContent: "center",
   },
 });
