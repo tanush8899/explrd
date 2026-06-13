@@ -243,8 +243,8 @@ export default function AddPlacePanel({
       <View style={styles.inputRow}>
         <TextInput
           style={styles.input}
-          placeholder="Tokyo, Eiffel Tower, or Brazil"
-          placeholderTextColor="#9aa0a6"
+          placeholder="Search city, landmark, university, park…"
+          placeholderTextColor="#868c94"
           value={query}
           onChangeText={handleSearch}
           onFocus={onSearchFocus}
@@ -290,6 +290,11 @@ export default function AddPlacePanel({
                   {secondary ? (
                     <Text style={styles.resultSecondary} numberOfLines={1}>{secondary}</Text>
                   ) : null}
+                  {item.landmark_name ? (
+                    <Text style={styles.resultLandmark} numberOfLines={1}>
+                      Near {item.landmark_name}
+                    </Text>
+                  ) : null}
                 </View>
                 <Ionicons name="chevron-forward" size={15} color="#c6c9ce" />
               </TouchableOpacity>
@@ -304,6 +309,15 @@ export default function AddPlacePanel({
           <Ionicons name="search" size={26} color="#c6c9ce" />
           <Text style={styles.emptyTitle}>No Results</Text>
           <Text style={styles.emptyDesc}>Try a city, landmark, or country name</Text>
+        </View>
+      )}
+
+      {/* Hint when idle */}
+      {!selected && query.length === 0 && (
+        <View style={styles.hintBox}>
+          <Text style={styles.hintText}>
+            Search by city, country, landmark, university, or national park. We'll find the nearest city for you.
+          </Text>
         </View>
       )}
     </ScrollView>
@@ -388,6 +402,23 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   resultSecondary: {
+    fontSize: 12,
+    color: "#868c94",
+    marginTop: 2,
+  },
+  resultLandmark: {
+    fontSize: 11,
+    color: "#a0a7b0",
+    marginTop: 2,
+    fontStyle: "italic",
+  },
+  hintBox: {
+    marginTop: 20,
+    padding: 14,
+    backgroundColor: "#f7f8f9",
+    borderRadius: 12,
+  },
+  hintText: {
     fontSize: 13,
     color: "#85898f",
     marginTop: 1,
