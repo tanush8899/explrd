@@ -463,32 +463,33 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     letterSpacing: -0.2,
   },
+  // Gold avatar chip — Flighty's "TS" pill
   pillAvatar: {
     width: 36,
     height: 36,
     borderRadius: 18,              // self-contained circle, no parent clipping needed
-    backgroundColor: "#c9a84c",
+    backgroundColor: "#ecd393",
     alignItems: "center",
     justifyContent: "center",
   },
   pillAvatarText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#ffffff",
+    color: "#5b4a17",
   },
   avatar: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#c9a84c",
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: "#ecd393",
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   avatarText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
-    color: "#ffffff",
+    color: "#5b4a17",
   },
   fullContent: {
     flex: 1,
@@ -502,10 +503,10 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 28,
-    fontWeight: "700",
-    color: "#111214",
-    letterSpacing: -0.5,
+    fontSize: 33,
+    fontWeight: "800",
+    color: "#0b0c0e",
+    letterSpacing: -0.9,
     marginRight: 12,
   },
   content: {
