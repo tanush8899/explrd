@@ -14,8 +14,9 @@ import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
 import { searchPlaces, savePin, type GeoResult } from "@/lib/api";
 import type { SavedPlace } from "@explrd/shared";
+import { colors } from "@/lib/theme";
 
-const BLUE = "#0a84ff";
+const BLUE = colors.blue;
 
 type Props = {
   places: SavedPlace[];
@@ -333,7 +334,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 14,
-    backgroundColor: "#eff1f3",
+    backgroundColor: colors.fillSecondary,
     paddingHorizontal: 16,
     marginBottom: 4,
   },
@@ -361,7 +362,7 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 10,
     fontSize: 13,
-    color: "#ff453a",
+    color: colors.danger,
   },
 
   // Results — Flighty's icon rows
@@ -378,7 +379,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "rgba(10,132,255,0.10)",
+    backgroundColor: colors.blueSoft,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -452,7 +453,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "rgba(10,132,255,0.10)",
+    backgroundColor: colors.blueSoft,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -494,11 +495,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingVertical: 16,
     alignItems: "center",
-    backgroundColor: "rgba(255,69,58,0.10)",
+    backgroundColor: colors.dangerSoft,
   },
   removeBtnText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#ff453a",
+    color: colors.danger,
   },
 });

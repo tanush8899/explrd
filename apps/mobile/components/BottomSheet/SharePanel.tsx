@@ -18,6 +18,7 @@ import type { SavedPlace } from "@explrd/shared";
 import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
 import PassportCard from "@/components/PassportCard";
+import { colors, gradients } from "@/lib/theme";
 
 type Props = {
   places: SavedPlace[];
@@ -173,7 +174,7 @@ export default function SharePanel({ places }: Props) {
           {/* ── Explorer Score ──────────────────────────────────────────────── */}
           <View style={styles.scoreCardWrapper}>
             <LinearGradient
-              colors={["#0f1829", "#1a2f50"]}
+              colors={gradients.hero}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 1 }}
               style={styles.scoreCard}
@@ -636,7 +637,7 @@ const styles = StyleSheet.create({
     borderRadius: 2,
     overflow: "hidden",
   },
-  cProgressFill: { height: "100%", backgroundColor: "#3b82f6", borderRadius: 2 },
+  cProgressFill: { height: "100%", backgroundColor: colors.blue, borderRadius: 2 },
   continentBadge: {
     width: 44,
     height: 44,
@@ -646,7 +647,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  continentPct: { fontSize: 12, fontWeight: "700", color: "#3b82f6" },
+  continentPct: { fontSize: 12, fontWeight: "700", color: colors.blue },
 
   // Country grid
   countryGrid: { flexDirection: "row", flexWrap: "wrap", gap: 8, marginBottom: 4 },

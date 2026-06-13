@@ -2,21 +2,24 @@ import React from "react";
 import { Text, TouchableOpacity, View, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { GlassSurface } from "@/components/Glass";
+import { colors, shadow as sh } from "@/lib/theme";
 
 export type NavTab = "places" | "friends" | "passport";
 
-const BLUE = "#0a84ff";
+const BLUE = colors.blue;
+const INACTIVE = colors.muted;
 
 type TabConfig = {
   key: NavTab;
   label: string;
   icon: React.ComponentProps<typeof Ionicons>["name"];
+  iconActive: React.ComponentProps<typeof Ionicons>["name"];
 };
 
 const TABS: TabConfig[] = [
-  { key: "places", label: "My Places", icon: "location-sharp" },
-  { key: "friends", label: "Friends", icon: "people" },
-  { key: "passport", label: "Passport", icon: "book" },
+  { key: "places", label: "My Places", icon: "location-outline", iconActive: "location-sharp" },
+  { key: "friends", label: "Friends", icon: "people-outline", iconActive: "people" },
+  { key: "passport", label: "Passport", icon: "book-outline", iconActive: "book" },
 ];
 
 type Props = {
@@ -37,13 +40,13 @@ export default function BottomNav({ activeTab, onTabPress, onAdd }: Props) {
               <TouchableOpacity
                 key={tab.key}
                 onPress={() => onTabPress(tab.key)}
-                style={[styles.tabItem, isActive && styles.tabItemActive]}
-                activeOpacity={0.8}
+                style={styles.tabItem}
+                activeOpacity={0.7}
               >
                 <Ionicons
-                  name={tab.icon}
-                  size={19}
-                  color={isActive ? BLUE : "#5a5f66"}
+                  name={isActive ? tab.iconActive : tab.icon}
+                  size={22}
+                  color={isActive ? BLUE : INACTIVE}
                 />
                 <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
                   {tab.label}
@@ -62,7 +65,7 @@ export default function BottomNav({ activeTab, onTabPress, onAdd }: Props) {
           activeOpacity={0.8}
           accessibilityLabel="Add a place"
         >
-          <Ionicons name="search" size={21} color="#1c1c1e" />
+          <Ionicons name="search" size={22} color={colors.ink} />
         </TouchableOpacity>
       </GlassSurface>
     </View>
@@ -80,50 +83,35 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     borderRadius: 999,
-    paddingHorizontal: 5,
-    paddingVertical: 5,
-    // Subtle floating shadow
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
-    elevation: 6,
+    paddingHorizontal: 4,
+    paddingVertical: 6,
+    ...sh.floating,
   },
   tabs: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 2,
   },
   tabItem: {
     flex: 1,
-    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
-    paddingHorizontal: 8,
-    paddingVertical: 10,
-    borderRadius: 999,
-  },
-  tabItemActive: {
-    backgroundColor: "rgba(10,132,255,0.14)",
+    gap: 3,
+    paddingVertical: 6,
   },
   tabLabel: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "600",
-    color: "#5a5f66",
+    color: INACTIVE,
+    letterSpacing: -0.1,
   },
   tabLabelActive: {
     color: BLUE,
   },
   addBtn: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
-    elevation: 6,
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    ...sh.floating,
   },
   addTouch: {
     flex: 1,

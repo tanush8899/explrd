@@ -15,6 +15,7 @@ import { getExplrdStats } from "@explrd/shared";
 import type { SavedPlace, ExplrdStats } from "@explrd/shared";
 import { SheetScrollContext } from "@/components/Sheet";
 import { useFriends, type FriendEntry, type FriendMapFilter } from "@/lib/FriendsContext";
+import { colors, gradients } from "@/lib/theme";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -258,7 +259,7 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
 
       {selectedFriend && !selectedData && loadingSlug === selectedFriend.slug && (
         <View style={styles.loadingBox}>
-          <ActivityIndicator color="#3b82f6" />
+          <ActivityIndicator color={colors.blue} />
           <Text style={styles.loadingText}>
             Loading {firstName(selectedFriend.displayName)}'s globe…
           </Text>
@@ -349,15 +350,15 @@ function FriendDetail({
         />
       </View>
       <View style={styles.legendRow}>
-        {mapFilter === "both" && <LegendDot color="#111214" label="You" />}
-        <LegendDot color="#3b82f6" label={friendFirst} />
+        {mapFilter === "both" && <LegendDot color={colors.ink} label="You" />}
+        <LegendDot color={colors.blue} label={friendFirst} />
         {mapFilter === "both" && <LegendDot color="#8b5cf6" label="Both of you" />}
       </View>
 
       {/* VS card */}
       <View style={styles.vsCardWrapper}>
         <LinearGradient
-          colors={["#0f1829", "#1a3050"]}
+          colors={gradients.hero}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.vsCard}
@@ -517,7 +518,7 @@ function FactCard({
   return (
     <View style={styles.factCard}>
       <View style={styles.factIconWrap}>
-        <Ionicons name={icon} size={18} color="#3b82f6" />
+        <Ionicons name={icon} size={18} color={colors.blue} />
       </View>
       <View style={styles.factBody}>
         <Text style={styles.factTitle}>{title}</Text>
@@ -690,7 +691,7 @@ const styles = StyleSheet.create({
   vsBarTrack: { flexDirection: "row", height: 5, borderRadius: 3, overflow: "hidden" },
   vsBarMine: { backgroundColor: "#ffffff", borderRadius: 3 },
   vsBarGap: { width: 3 },
-  vsBarTheirs: { backgroundColor: "#3b82f6", borderRadius: 3 },
+  vsBarTheirs: { backgroundColor: colors.blue, borderRadius: 3 },
   vsFooter: {
     marginTop: 8,
     fontSize: 12,
@@ -717,7 +718,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#eef4ff",
+    backgroundColor: colors.blueSoft,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,

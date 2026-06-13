@@ -18,11 +18,12 @@ import {
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Ionicons } from "@expo/vector-icons";
+import { colors, radius as r, shadow as sh } from "@/lib/theme";
 
 const { height: SCREEN } = Dimensions.get("window");
 
 // ── Layout constants ──────────────────────────────────────────────────────────
-const RADIUS       = 44;                          // iPhone continuous corner curve
+const RADIUS       = r.sheet;                     // iPhone continuous corner curve
 const PILL_CONTENT = 64;                          // handle-row(18) + search-row(44) + margin(2)
 const MID_H        = Math.round(SCREEN * 0.52);  // state 1
 const FULL_H       = Math.round(SCREEN * 0.90);  // state 2
@@ -375,15 +376,11 @@ export default Sheet;
 const styles = StyleSheet.create({
   shadow: {
     position: "absolute",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -2 },
-    shadowOpacity: 0.13,
-    shadowRadius: 28,
-    elevation: 16,
+    ...sh.sheet,
   },
   card: {
     flex: 1,
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.bg,
     overflow: "hidden",
   },
   handleArea: {
@@ -393,9 +390,9 @@ const styles = StyleSheet.create({
     flexDirection: "row",
   },
   handlePill: {
-    width: 32,
-    height: 4,
-    borderRadius: 2,
+    width: 36,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: "#d1d1d6",
   },
   searchHeader: {
@@ -409,10 +406,10 @@ const styles = StyleSheet.create({
   },
   searchHeaderTitle: {
     flex: 1,
-    fontSize: 20,
-    fontWeight: "700",
-    color: "#111214",
-    letterSpacing: -0.4,
+    fontSize: 26,
+    fontWeight: "800",
+    color: colors.ink,
+    letterSpacing: -0.6,
   },
   cancelBtn: {
     padding: 4,
@@ -421,13 +418,13 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#e5e5ea",
+    backgroundColor: colors.fill,
     alignItems: "center",
     justifyContent: "center",
   },
   cancelX: {
     fontSize: 13,
-    color: "#3c3c43",
+    color: colors.inkSecondary,
     fontWeight: "700",
     lineHeight: 16,
     marginTop: 1,
@@ -448,6 +445,7 @@ const styles = StyleSheet.create({
   },
   pillContainer: {
     borderRadius: 28,
+    backgroundColor: colors.fillSecondary,
   },
   pillSearchRow: {
     flexDirection: "row",
@@ -459,7 +457,7 @@ const styles = StyleSheet.create({
   pillHint: {
     flex: 1,
     fontSize: 17,
-    color: "#8e8e93",
+    color: colors.muted,
     fontWeight: "400",
     letterSpacing: -0.2,
   },
@@ -468,20 +466,20 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,              // self-contained circle, no parent clipping needed
-    backgroundColor: "#ecd393",
+    backgroundColor: colors.gold,
     alignItems: "center",
     justifyContent: "center",
   },
   pillAvatarText: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#5b4a17",
+    color: colors.goldInk,
   },
   avatar: {
     width: 42,
     height: 42,
     borderRadius: 21,
-    backgroundColor: "#ecd393",
+    backgroundColor: colors.gold,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -489,7 +487,7 @@ const styles = StyleSheet.create({
   avatarText: {
     fontSize: 15,
     fontWeight: "700",
-    color: "#5b4a17",
+    color: colors.goldInk,
   },
   fullContent: {
     flex: 1,
@@ -503,9 +501,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     flex: 1,
-    fontSize: 33,
+    fontSize: 34,
     fontWeight: "800",
-    color: "#0b0c0e",
+    color: colors.ink,
     letterSpacing: -0.9,
     marginRight: 12,
   },

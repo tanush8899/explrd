@@ -1,13 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from "react";
-import {
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { StyleSheet, View } from "react-native";
 import MapView, { Marker, type Camera, type Region } from "react-native-maps";
-import { BlurView } from "expo-blur";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { GlassCircleButton, Icon } from "@/components/Glass";
 import type { SavedPlace } from "@explrd/shared";
 
 export type PreviewCoord = { lat: number; lng: number; place_id: string; addresstype?: string | null };
@@ -49,38 +44,6 @@ const WORLD_REGION: Region = {
 };
 
 const FIT_PADDING = { top: 80, right: 48, bottom: 360, left: 48 };
-
-// ── Icon ──────────────────────────────────────────────────────────────────────
-
-function GlobeIcon({ c = "#111214" }: { c?: string }) {
-  return (
-    <View style={{ width: 20, height: 20, alignItems: "center", justifyContent: "center" }}>
-      {/* Outer circle */}
-      <View style={{
-        width: 18, height: 18, borderRadius: 9,
-        borderWidth: 2, borderColor: c,
-        alignItems: "center", justifyContent: "center",
-        overflow: "hidden",
-      }}>
-        {/* Horizontal equator line */}
-        <View style={{ position: "absolute", width: 18, height: 1.5, backgroundColor: c, opacity: 0.5 }} />
-        {/* Vertical meridian */}
-        <View style={{ position: "absolute", width: 1.5, height: 18, backgroundColor: c, opacity: 0.5 }} />
-      </View>
-    </View>
-  );
-}
-
-function MapIcon({ c = "#111214" }: { c?: string }) {
-  return (
-    <View style={{ width: 20, height: 20, alignItems: "center", justifyContent: "center" }}>
-      <View style={{ width: 18, height: 14, borderRadius: 3, borderWidth: 2, borderColor: c }}>
-        <View style={{ position: "absolute", top: 3, left: 0, right: 0, height: 1.5, backgroundColor: c, opacity: 0.45 }} />
-        <View style={{ position: "absolute", top: 7, left: 0, right: 0, height: 1.5, backgroundColor: c, opacity: 0.45 }} />
-      </View>
-    </View>
-  );
-}
 
 // ── Main component ────────────────────────────────────────────────────────────
 
@@ -223,20 +186,20 @@ export default function PlacesMap({ places, previewCoord, friendOverlay }: Props
 
       </MapView>
 
-      {/* Toggle button */}
-      <View style={[styles.btnShadow, { top: insets.top + 12, right: 16 }]}>
-        <BlurView intensity={90} tint="systemChromeMaterialLight" style={styles.btnBlur}>
-          <View style={styles.btnSpecular} pointerEvents="none" />
-          <TouchableOpacity
-            onPress={handleToggle}
-            style={styles.btnTouch}
-            activeOpacity={0.75}
-            accessibilityLabel={isGlobe ? "Switch to standard map" : "Switch to globe"}
-          >
-            {isGlobe ? <MapIcon /> : <GlobeIcon />}
-          </TouchableOpacity>
-        </BlurView>
-      </View>
+      {/* Floating dark-glass map control — Flighty's stacked globe controls */}
+      <GlassCircleButton
+        onPress={handleToggle}
+        scheme="dark"
+        accessibilityLabel={isGlobe ? "Switch to standard map" : "Switch to globe"}
+        style={{ position: "absolute", top: insets.top + 12, right: 16 }}
+      >
+        <Icon
+          name={isGlobe ? "map.fill" : "globe.americas.fill"}
+          fallback={isGlobe ? "🗺" : "🌐"}
+          size={20}
+          color="#ffffff"
+        />
+      </GlassCircleButton>
     </View>
   );
 }
@@ -244,29 +207,6 @@ export default function PlacesMap({ places, previewCoord, friendOverlay }: Props
 // ── Styles ────────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  btnShadow: {
-    position: "absolute",
-    borderRadius: 22,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.13,
-    shadowRadius: 16,
-    elevation: 12,
-  },
-  btnBlur: {
-    width: 44, height: 44, borderRadius: 22,
-    overflow: "hidden",
-    borderWidth: 0.5, borderColor: "rgba(255,255,255,0.5)",
-    alignItems: "center", justifyContent: "center",
-  },
-  btnSpecular: {
-    position: "absolute", top: 0, left: 0, right: 0,
-    height: 1, backgroundColor: "rgba(255,255,255,0.72)",
-  },
-  btnTouch: {
-    width: 44, height: 44,
-    alignItems: "center", justifyContent: "center",
-  },
   markerOuter: {
     width: 16, height: 16, borderRadius: 8,
     backgroundColor: "#ffffff",
@@ -281,7 +221,7 @@ const styles = StyleSheet.create({
   },
   markerInnerFriend: {
     width: 9, height: 9, borderRadius: 4.5,
-    backgroundColor: "#3b82f6",
+    backgroundColor: "#007aff",
   },
   markerInnerShared: {
     width: 9, height: 9, borderRadius: 4.5,

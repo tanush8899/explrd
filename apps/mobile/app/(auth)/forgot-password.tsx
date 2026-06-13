@@ -13,8 +13,9 @@ import {
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
 import { sendPasswordReset } from "@/lib/auth";
+import { colors, gradients } from "@/lib/theme";
 
-const BLUE = "#0a84ff";
+const BLUE = colors.blue;
 
 export default function ForgotPasswordScreen() {
   const router = useRouter();
@@ -41,7 +42,7 @@ export default function ForgotPasswordScreen() {
   }
 
   return (
-    <LinearGradient colors={["#0c1023", "#080b16", "#05070d"]} style={styles.root}>
+    <LinearGradient colors={gradients.auth} style={styles.root}>
       <KeyboardAvoidingView
         style={styles.flex}
         behavior={Platform.OS === "ios" ? "padding" : "height"}
