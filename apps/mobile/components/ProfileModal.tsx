@@ -23,6 +23,7 @@ import { useSession } from "@/lib/SessionContext";
 import { signOut } from "@/lib/auth";
 import { fetchProfile, updateProfile } from "@/lib/api";
 import type { UserProfile } from "@explrd/shared";
+import { colors } from "@/lib/theme";
 
 const { height: SCREEN } = Dimensions.get("window");
 const SHEET_H = Math.round(SCREEN * 0.88);
@@ -185,7 +186,7 @@ export default function ProfileModal({ visible, onClose }: Props) {
           >
             {loading && (
               <View style={styles.centered}>
-                <ActivityIndicator color="#3b82f6" />
+                <ActivityIndicator color={colors.blue} />
               </View>
             )}
 
@@ -233,7 +234,7 @@ export default function ProfileModal({ visible, onClose }: Props) {
                   <Switch
                     value={isPublic}
                     onValueChange={setIsPublic}
-                    trackColor={{ true: "#111214", false: "#e4e6e8" }}
+                    trackColor={{ true: colors.blue, false: colors.hairline }}
                     thumbColor="#ffffff"
                   />
                 </View>
@@ -257,7 +258,7 @@ export default function ProfileModal({ visible, onClose }: Props) {
                 {friendLink && (
                   <View style={styles.linkCard}>
                     <View style={styles.linkCardTop}>
-                      <Ionicons name="link" size={16} color="#3b82f6" />
+                      <Ionicons name="link" size={16} color={colors.blue} />
                       <Text style={styles.linkCardTitle}>Your Friend Link</Text>
                     </View>
                     <Text style={styles.linkCardUrl} numberOfLines={1}>{friendLink}</Text>
@@ -269,9 +270,9 @@ export default function ProfileModal({ visible, onClose }: Props) {
                       <Ionicons
                         name={copied ? "checkmark-circle" : "copy-outline"}
                         size={16}
-                        color={copied ? "#10b981" : "#3b82f6"}
+                        color={copied ? colors.success : colors.blue}
                       />
-                      <Text style={[styles.copyBtnText, copied && { color: "#10b981" }]}>
+                      <Text style={[styles.copyBtnText, copied && { color: colors.success }]}>
                         {copied ? "Copied!" : "Copy link"}
                       </Text>
                     </TouchableOpacity>
@@ -356,11 +357,11 @@ const styles = StyleSheet.create({
     width: 30,
     height: 30,
     borderRadius: 15,
-    backgroundColor: "#e5e5ea",
+    backgroundColor: colors.fill,
     alignItems: "center",
     justifyContent: "center",
   },
-  closeX: { fontSize: 13, color: "#3c3c43", fontWeight: "700" },
+  closeX: { fontSize: 13, color: colors.inkSecondary, fontWeight: "700" },
 
   body: { padding: 20, paddingBottom: 40 },
   centered: { paddingVertical: 48, alignItems: "center" },
@@ -376,14 +377,14 @@ const styles = StyleSheet.create({
     marginTop: 16,
   },
   input: {
-    backgroundColor: "#f7f8f9",
+    backgroundColor: colors.fill,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#e4e6e8",
+    borderColor: colors.hairline,
     paddingHorizontal: 14,
     paddingVertical: 12,
     fontSize: 15,
-    color: "#111214",
+    color: colors.ink,
   },
   inputRow: { flexDirection: "row", alignItems: "center", gap: 0 },
   inputPrefix: {
@@ -417,7 +418,7 @@ const styles = StyleSheet.create({
   // Save button
   saveBtn: {
     marginTop: 18,
-    backgroundColor: "#111214",
+    backgroundColor: colors.blue,
     borderRadius: 14,
     paddingVertical: 14,
     alignItems: "center",
@@ -447,7 +448,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
     marginBottom: 8,
   },
-  copyBtnText: { fontSize: 13, fontWeight: "600", color: "#3b82f6" },
+  copyBtnText: { fontSize: 13, fontWeight: "600", color: colors.blue },
   linkCardHint: { fontSize: 11, color: "#6b8ac4", lineHeight: 16 },
 
   // No link nudge

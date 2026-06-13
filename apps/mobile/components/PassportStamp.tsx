@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { SavedPlace } from "@explrd/shared";
+import { gradients } from "@/lib/theme";
 
 type Props = {
   place: SavedPlace;
@@ -110,7 +111,7 @@ export default function PassportStamp({ place, onDismiss }: Props) {
         ]}
       >
         <LinearGradient
-          colors={["#2a1a58", "#111827", "#0a0f1a"]}
+          colors={gradients.passport}
           start={{ x: 0.15, y: 0 }}
           end={{ x: 0.85, y: 1 }}
           style={styles.gradient}

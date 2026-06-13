@@ -12,6 +12,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { getExplrdStats, getPlaceHierarchy } from "@explrd/shared";
 import type { SavedPlace } from "@explrd/shared";
+import { colors, gradients, radius as r, shadow as sh } from "@/lib/theme";
 
 type Props = {
   places: SavedPlace[];
@@ -72,7 +73,7 @@ export default function MyPlacesPanel({
       {/* Dark stats card */}
       <View style={styles.statsCardWrapper}>
         <LinearGradient
-          colors={["#0f1829", "#1a3050"]}
+          colors={gradients.hero}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.statsCard}
@@ -91,7 +92,7 @@ export default function MyPlacesPanel({
           {/* Progress bar */}
           <View style={styles.progressTrack}>
             <LinearGradient
-              colors={["#3b82f6", "#8b5cf6"]}
+              colors={gradients.progress}
               start={{ x: 0, y: 0 }}
               end={{ x: 1, y: 0 }}
               style={[styles.progressFill, { width: `${progressWidth}%` }]}
@@ -442,7 +443,7 @@ const styles = StyleSheet.create({
   },
   continentProgressFill: {
     height: "100%",
-    backgroundColor: "#3b82f6",
+    backgroundColor: colors.blue,
     borderRadius: 2,
   },
 
@@ -482,7 +483,7 @@ const styles = StyleSheet.create({
   countryPct: {
     fontSize: 13,
     fontWeight: "600",
-    color: "#3b82f6",
+    color: colors.blue,
   },
   countryProgressTrack: {
     height: 3,
@@ -492,7 +493,7 @@ const styles = StyleSheet.create({
   },
   countryProgressFill: {
     height: "100%",
-    backgroundColor: "#3b82f6",
+    backgroundColor: colors.blue,
     borderRadius: 2,
   },
 

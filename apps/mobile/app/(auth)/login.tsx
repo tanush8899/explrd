@@ -18,10 +18,11 @@ import {
   signUpWithEmail,
   signInWithGoogleNative,
 } from "@/lib/auth";
+import { colors, gradients } from "@/lib/theme";
 
 type Mode = "login" | "signup";
 
-const BLUE = "#0a84ff";
+const BLUE = colors.blue;
 
 export default function LoginScreen() {
   const router = useRouter();
@@ -84,7 +85,7 @@ export default function LoginScreen() {
 
   return (
     <LinearGradient
-      colors={["#0c1023", "#080b16", "#05070d"]}
+      colors={gradients.auth}
       style={styles.root}
     >
       <KeyboardAvoidingView
