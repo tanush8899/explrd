@@ -290,6 +290,11 @@ export default function AddPlacePanel({
                   {secondary ? (
                     <Text style={styles.resultSecondary} numberOfLines={1}>{secondary}</Text>
                   ) : null}
+                  {item.landmark_name ? (
+                    <Text style={styles.resultLandmark} numberOfLines={1}>
+                      Near {item.landmark_name}
+                    </Text>
+                  ) : null}
                 </View>
                 <Ionicons name="chevron-forward" size={15} color="#c6c9ce" />
               </TouchableOpacity>
@@ -391,6 +396,12 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: "#85898f",
     marginTop: 1,
+  },
+  resultLandmark: {
+    fontSize: 11,
+    color: "#a0a7b0",
+    marginTop: 2,
+    fontStyle: "italic",
   },
 
   // Empty state
