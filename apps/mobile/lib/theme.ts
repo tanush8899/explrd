@@ -17,6 +17,7 @@ export const colors = {
   muted:         "#8e8e93", // tertiary / placeholder / captions
   faint:         "#a8acb3", // quaternary
   hairline:      "#e5e5ea", // separators / borders
+  line:          "#f0f1f2", // hairline inside cards / between rows
   fill:          "#f2f2f7", // iOS systemFill — gray cards/chips
   fillSecondary: "#eff1f3", // search capsule / inset fields
   card:          "#ffffff", // elevated white card
@@ -130,5 +131,19 @@ export const shadow = {
   } as ViewStyle,
 } as const;
 
-export const theme = { colors, gradients, radius, space, type, shadow };
+// ── Motion (reanimated spring configs — UI-thread) ───────────────────────────
+// One source of truth for the app's feel. Used with withSpring(value, motion.x).
+export const motion = {
+  // The bottom sheet — snappy with a light, confident bounce.
+  sheet:  { damping: 24, stiffness: 240, mass: 0.9, overshootClamping: false } as const,
+  // General UI movement (indicators, reveals) — settled, almost no overshoot.
+  gentle: { damping: 26, stiffness: 180, mass: 1 } as const,
+  // Press / tap feedback — fast and crisp.
+  press:  { damping: 18, stiffness: 340, mass: 0.7 } as const,
+  // Entrance timing for staggered cards/rows.
+  enter:  { duration: 360 } as const,
+  stagger: 45,
+} as const;
+
+export const theme = { colors, gradients, radius, space, type, shadow, motion };
 export default theme;

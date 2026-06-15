@@ -15,6 +15,8 @@ import { useSession } from "@/lib/SessionContext";
 import { searchPlaces, savePin, type GeoResult } from "@/lib/api";
 import type { SavedPlace } from "@explrd/shared";
 import { colors } from "@/lib/theme";
+import { success, impact } from "@/lib/haptics";
+import { IconWell } from "@/components/ui";
 
 const BLUE = colors.blue;
 
@@ -110,6 +112,7 @@ export default function AddPlacePanel({
         lng: selected.lng,
         address: selected.address,
       });
+      success();
       onSaved({
         place_id: selected.place_id,
         name: selected.display_name,
@@ -179,9 +182,8 @@ export default function AddPlacePanel({
 
         {/* Place info */}
         <View style={styles.placeInfo}>
-          <View style={styles.placeIconCircle}>
-            <Ionicons name="location" size={22} color={BLUE} />
-          </View>
+          <IconWell name="location" color={BLUE} diameter={48} size={22} />
+
           <View style={styles.placeTextBlock}>
             <Text style={styles.placeName} numberOfLines={2}>{primaryName}</Text>
             {locationDetail ? (
@@ -208,7 +210,7 @@ export default function AddPlacePanel({
           </TouchableOpacity>
         ) : (
           <TouchableOpacity
-            onPress={handleSave}
+            onPress={() => { impact("medium"); handleSave(); }}
             disabled={saving}
             style={styles.addBtn}
             activeOpacity={0.85}
@@ -283,9 +285,8 @@ export default function AddPlacePanel({
                 style={styles.resultRow}
                 activeOpacity={0.6}
               >
-                <View style={styles.resultIconCircle}>
-                  <Ionicons name="location-sharp" size={16} color={BLUE} />
-                </View>
+                <IconWell name="location-sharp" color={BLUE} diameter={38} size={16} />
+
                 <View style={styles.resultText}>
                   <Text style={styles.resultPrimary} numberOfLines={1}>{primary}</Text>
                   {secondary ? (

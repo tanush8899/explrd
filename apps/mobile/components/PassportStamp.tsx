@@ -3,6 +3,7 @@ import { Animated, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { SavedPlace } from "@explrd/shared";
 import { gradients } from "@/lib/theme";
+import { success } from "@/lib/haptics";
 
 type Props = {
   place: SavedPlace;
@@ -23,6 +24,9 @@ export default function PassportStamp({ place, onDismiss }: Props) {
   const rippleOpacity   = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
+    // Taptic "stamp" thud as the card presses in.
+    success();
+
     // ── Entrance ────────────────────────────────────────────────────────────
     Animated.parallel([
       // Overlay fades in

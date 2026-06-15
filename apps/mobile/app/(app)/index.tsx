@@ -67,6 +67,12 @@ export default function MainScreen() {
     sheetRef.current?.snapTo(2);
   }, []);
 
+  // Header share → open the shareable Passport, expanded.
+  const handleHeaderShare = useCallback(() => {
+    setActiveTab("passport");
+    sheetRef.current?.snapTo(2);
+  }, []);
+
   const handleSearchPillPress = useCallback(() => {
     setActiveTab("add");
     sheetRef.current?.snapTo(2);
@@ -171,6 +177,7 @@ export default function MainScreen() {
         title={TAB_TITLES[activeTab]}
         avatarLabel={avatarLabel}
         onAvatarPress={() => setProfileOpen(true)}
+        onSharePress={activeTab !== "add" ? handleHeaderShare : undefined}
         searchPlaceholder="Search city, country…"
         onSearchPillPress={handleSearchPillPress}
         showCloseButton={activeTab === "add"}

@@ -24,6 +24,7 @@ import { signOut } from "@/lib/auth";
 import { fetchProfile, updateProfile } from "@/lib/api";
 import type { UserProfile } from "@explrd/shared";
 import { colors } from "@/lib/theme";
+import { success, tap, warn } from "@/lib/haptics";
 
 const { height: SCREEN } = Dimensions.get("window");
 const SHEET_H = Math.round(SCREEN * 0.88);
@@ -110,6 +111,7 @@ export default function ProfileModal({ visible, onClose }: Props) {
       setProfile(updated);
       setSlug(updated.public_slug ?? "");
       setIsPublic(updated.is_public);
+      success();
     } catch (e) {
       setError(e instanceof Error ? e.message : "Could not save profile");
     } finally {
@@ -120,11 +122,13 @@ export default function ProfileModal({ visible, onClose }: Props) {
   const handleCopy = useCallback(async () => {
     if (!friendLink) return;
     await Clipboard.setStringAsync(friendLink);
+    tap();
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [friendLink]);
 
   const handleSignOut = () => {
+    warn();
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
       { text: "Cancel", style: "cancel" },
       {
@@ -173,7 +177,7 @@ export default function ProfileModal({ visible, onClose }: Props) {
             <Text style={styles.headerTitle}>Profile</Text>
             <TouchableOpacity onPress={onClose} hitSlop={10} activeOpacity={0.7}>
               <View style={styles.closeCircle}>
-                <Text style={styles.closeX}>✕</Text>
+                <Ionicons name="close" size={16} color={colors.inkSecondary} />
               </View>
             </TouchableOpacity>
           </View>
