@@ -1,4 +1,9 @@
-import type { SavedPlace, ExplrdStats, UserProfile } from "@explrd/shared";
+import type {
+  SavedPlace,
+  ExplrdStats,
+  UserProfile,
+  FriendsPayload,
+} from "@explrd/shared";
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
@@ -397,10 +402,9 @@ export async function fetchPlaceBoundary(
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
 export type ProfileBody = {
-  display_name?: string;
-  public_slug?: string;
-  bio?: string;
-  is_public?: boolean;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
 };
 
 /** GET /api/profile */
@@ -431,6 +435,20 @@ export async function updateProfile(
   return data.profile;
 }
 
+/** GET /api/username-available?u= — { available, reason? } */
+export async function checkUsernameAvailable(
+  accessToken: string,
+  username: string,
+  signal?: AbortSignal,
+): Promise<{ available: boolean; reason?: string }> {
+  const res = await fetch(
+    `${API_BASE}/api/username-available?u=${encodeURIComponent(username)}`,
+    { headers: authHeaders(accessToken), signal },
+  );
+  if (!res.ok) throw new Error(`checkUsernameAvailable: ${res.status}`);
+  return res.json();
+}
+
 // ─── Friends ─────────────────────────────────────────────────────────────────
 
 export type FriendProfilePayload = {
@@ -453,6 +471,65 @@ export async function fetchPublicProfile(
   }
   if (!res.ok) throw new Error(`fetchPublicProfile: ${res.status}`);
   return res.json();
+}
+
+/** GET /api/friends — friends + incoming/outgoing requests for the caller. */
+export async function fetchFriends(accessToken: string): Promise<FriendsPayload> {
+  const res = await fetch(`${API_BASE}/api/friends`, {
+    headers: authHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(`fetchFriends: ${res.status}`);
+  return res.json();
+}
+
+/** POST /api/friends/request — send (or auto-accept reverse) by @username. */
+export async function sendFriendRequest(
+  accessToken: string,
+  username: string,
+): Promise<{ status: "pending" | "accepted" }> {
+  const res = await fetch(`${API_BASE}/api/friends/request`, {
+    method: "POST",
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ username }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.details ?? err.error ?? `sendFriendRequest: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** POST /api/friends/respond — accept or reject an incoming request. */
+export async function respondToFriendRequest(
+  accessToken: string,
+  requestId: string,
+  action: "accept" | "reject",
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/friends/respond`, {
+    method: "POST",
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ requestId, action }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.details ?? err.error ?? `respondToFriendRequest: ${res.status}`);
+  }
+}
+
+/** DELETE /api/friends — un-friend or withdraw an outgoing request. */
+export async function removeFriend(
+  accessToken: string,
+  userId: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/friends`, {
+    method: "DELETE",
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.details ?? err.error ?? `removeFriend: ${res.status}`);
+  }
 }
 
 // ─── Share ───────────────────────────────────────────────────────────────────

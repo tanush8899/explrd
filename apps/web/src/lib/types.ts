@@ -43,12 +43,34 @@ export type GeoFeatureCollection = {
 
 export type UserProfile = {
   user_id: string;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
   display_name: string | null;
   public_slug: string | null;
   bio: string | null;
   is_public: boolean;
   created_at: string | null;
   updated_at: string | null;
+};
+
+export type FriendSummary = {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+};
+
+export type FriendRequestSummary = FriendSummary & {
+  request_id: string;
+  created_at: string | null;
+};
+
+export type FriendsPayload = {
+  friends: FriendSummary[];
+  incoming: FriendRequestSummary[];
+  outgoing: FriendRequestSummary[];
 };
 
 export type ApiErrorResponse = {

@@ -43,6 +43,9 @@ export type GeoFeatureCollection = {
 
 export type UserProfile = {
   user_id: string;
+  username: string | null;
+  first_name: string | null;
+  last_name: string | null;
   display_name: string | null;
   public_slug: string | null;
   bio: string | null;
@@ -59,4 +62,29 @@ export type ApiErrorResponse = {
 export type PublicProfilePayload = {
   profile: UserProfile;
   places: SavedPlace[];
+};
+
+// ── Friends / social graph ───────────────────────────────────────────────────
+
+/** A person in your social graph (friend, or party to a request). */
+export type FriendSummary = {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+};
+
+/** A pending request, with the request row id so it can be accepted/rejected. */
+export type FriendRequestSummary = FriendSummary & {
+  request_id: string;
+  created_at: string | null;
+};
+
+export type FriendsPayload = {
+  friends: FriendSummary[];
+  /** Requests sent to me, awaiting my accept/reject. */
+  incoming: FriendRequestSummary[];
+  /** Requests I sent, awaiting the other person. */
+  outgoing: FriendRequestSummary[];
 };

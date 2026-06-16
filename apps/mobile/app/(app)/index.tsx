@@ -1,16 +1,19 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { View, Keyboard, StyleSheet } from "react-native";
-import Sheet, { type SheetHandle } from "@/components/Sheet";
+import { View, Keyboard, Alert, StyleSheet } from "react-native";
+import Sheet, { type SheetHandle, type AvatarAnchor } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
+import { useProfile } from "@/lib/ProfileContext";
 import { usePlaces } from "@/lib/PlacesContext";
 
 import AddPlacePanel from "@/components/BottomSheet/AddPlacePanel";
 import MyPlacesPanel from "@/components/BottomSheet/MyPlacesPanel";
 import SharePanel from "@/components/BottomSheet/SharePanel";
 import FriendsPanel from "@/components/BottomSheet/FriendsPanel";
+import ProfilePanel from "@/components/BottomSheet/ProfilePanel";
 import PlacesMap, { type PreviewCoord, type FriendOverlay } from "@/components/PlacesMap";
 import { useFriends } from "@/lib/FriendsContext";
-import ProfileModal from "@/components/ProfileModal";
+import AvatarMenu from "@/components/AvatarMenu";
+import { signOut } from "@/lib/auth";
 import BottomNav, { type NavTab } from "@/components/BottomNav";
 import PassportStamp from "@/components/PassportStamp";
 import type { SavedPlace } from "@explrd/shared";
@@ -18,19 +21,21 @@ import type { GeoResult } from "@/lib/api";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-type ActiveTab = NavTab | "add";
+type ActiveTab = NavTab | "add" | "profile";
 
 const TAB_TITLES: Record<ActiveTab, string> = {
   places: "My Places",
   friends: "Friends",
   passport: "Passport",
   add: "Add Place",
+  profile: "Profile",
 };
 
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function MainScreen() {
   const { user } = useSession();
+  const { profile } = useProfile();
   const { places, setPlaces, refresh, deletePlace } = usePlaces();
   const { selectedData: friendData, mapFilter } = useFriends();
   const sheetRef = useRef<SheetHandle>(null);
@@ -39,7 +44,11 @@ export default function MainScreen() {
   const [deletingId, setDeletingId]     = useState<string | null>(null);
   const [previewCoord, setPreviewCoord] = useState<PreviewCoord | null>(null);
   const [stampPlace, setStampPlace]     = useState<SavedPlace | null>(null);
-  const [profileOpen, setProfileOpen]   = useState(false);
+  const [menuOpen, setMenuOpen]         = useState(false);
+  const [menuAnchor, setMenuAnchor]     = useState<AvatarAnchor | null>(null);
+
+  // Tab to return to when the profile panel is closed.
+  const tabBeforeProfile = useRef<ActiveTab>("places");
 
   // Ref so onSnap callback can read activeTab without stale closure
   const activeTabRef = useRef<ActiveTab>(activeTab);
@@ -47,15 +56,51 @@ export default function MainScreen() {
   // Prevents handleSnap from clearing the preview when save itself triggers the snap
   const isSavingRef = useRef(false);
 
+  const fullName = [profile?.first_name, profile?.last_name]
+    .filter(Boolean)
+    .join(" ");
   const displayName =
-    (user?.user_metadata?.full_name as string | undefined) ??
-    user?.email?.split("@")[0] ??
+    profile?.display_name ||
+    fullName ||
+    (user?.user_metadata?.full_name as string | undefined) ||
+    user?.email?.split("@")[0] ||
     "Explorer";
 
-  const avatarLabel = useMemo(
-    () => displayName.slice(0, 2).toUpperCase(),
-    [displayName],
-  );
+  // Initials from first+last name when we have them, else from the display name.
+  const avatarLabel = useMemo(() => {
+    if (profile?.first_name) {
+      return (
+        profile.first_name[0] + (profile.last_name?.[0] ?? "")
+      ).toUpperCase();
+    }
+    return displayName.slice(0, 2).toUpperCase();
+  }, [profile?.first_name, profile?.last_name, displayName]);
+
+  // ── Avatar menu / profile ─────────────────────────────────────────────────────
+  const handleAvatarPress = useCallback((anchor: AvatarAnchor) => {
+    setMenuAnchor(anchor);
+    setMenuOpen(true);
+  }, []);
+
+  const handleViewProfile = useCallback(() => {
+    tabBeforeProfile.current =
+      activeTabRef.current === "profile" ? "places" : activeTabRef.current;
+    setActiveTab("profile");
+    sheetRef.current?.snapTo(2);
+  }, []);
+
+  const handleProfileClose = useCallback(() => {
+    Keyboard.dismiss();
+    const back = tabBeforeProfile.current;
+    setActiveTab(back === "add" ? "places" : back);
+  }, []);
+
+  const handleSignOut = useCallback(() => {
+    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
+      { text: "Cancel", style: "cancel" },
+      { text: "Sign Out", style: "destructive", onPress: () => void signOut() },
+    ]);
+  }, []);
 
   // ── Nav ───────────────────────────────────────────────────────────────────────
   const handleNavTabPress = useCallback((tab: NavTab) => {
@@ -87,6 +132,9 @@ export default function MainScreen() {
     if (activeTabRef.current === "add" && i === 0) {
       Keyboard.dismiss();
       setPreviewCoord(null);
+      setActiveTab("places");
+    } else if (activeTabRef.current === "profile" && i === 0) {
+      Keyboard.dismiss();
       setActiveTab("places");
     }
   }, []);
@@ -170,15 +218,15 @@ export default function MainScreen() {
         initialIndex={1}
         title={TAB_TITLES[activeTab]}
         avatarLabel={avatarLabel}
-        onAvatarPress={() => setProfileOpen(true)}
+        onAvatarPress={handleAvatarPress}
         searchPlaceholder="Search city, country…"
         onSearchPillPress={handleSearchPillPress}
-        showCloseButton={activeTab === "add"}
-        onClose={handleSearchClose}
+        showCloseButton={activeTab === "add" || activeTab === "profile"}
+        onClose={activeTab === "profile" ? handleProfileClose : handleSearchClose}
         midHeight={previewCoord !== null && activeTab === "add" ? 340 : undefined}
         onSnap={handleSnap}
         footer={
-          activeTab !== "add" ? (
+          activeTab !== "add" && activeTab !== "profile" ? (
             <BottomNav
               activeTab={navActiveTab}
               onTabPress={handleNavTabPress}
@@ -199,6 +247,9 @@ export default function MainScreen() {
           <FriendsPanel myPlaces={places} myDisplayName={displayName} />
         )}
         {activeTab === "passport" && <SharePanel places={places} />}
+        {activeTab === "profile" && (
+          <ProfilePanel displayName={displayName} avatarLabel={avatarLabel} />
+        )}
         {activeTab === "add" && (
           <AddPlacePanel
             places={places}
@@ -222,9 +273,14 @@ export default function MainScreen() {
         />
       )}
 
-      <ProfileModal
-        visible={profileOpen}
-        onClose={() => setProfileOpen(false)}
+      <AvatarMenu
+        visible={menuOpen}
+        anchor={menuAnchor}
+        displayName={displayName}
+        avatarLabel={avatarLabel}
+        onClose={() => setMenuOpen(false)}
+        onViewProfile={handleViewProfile}
+        onSignOut={handleSignOut}
       />
     </View>
   );

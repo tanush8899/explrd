@@ -7,19 +7,22 @@ import React, {
   useRef,
   useState,
 } from "react";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import type { SavedPlace, ExplrdStats } from "@explrd/shared";
-import { fetchPublicProfile } from "./api";
+import type {
+  SavedPlace,
+  ExplrdStats,
+  FriendSummary,
+  FriendRequestSummary,
+} from "@explrd/shared";
+import {
+  fetchFriends,
+  fetchPublicProfile,
+  sendFriendRequest,
+  respondToFriendRequest,
+  removeFriend as apiRemoveFriend,
+} from "./api";
 import { useSession } from "./SessionContext";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
-
-/** Persisted entry — places/stats are re-fetched, never stored (boundaries are big). */
-export type FriendEntry = {
-  slug: string;
-  displayName: string;
-  addedAt: string;
-};
 
 export type FriendData = {
   displayName: string;
@@ -31,181 +34,222 @@ export type FriendData = {
 export type FriendMapFilter = "both" | "friend";
 
 type FriendsCtx = {
-  friends: FriendEntry[];
-  selectedSlug: string | null;
-  /** Live data for the selected friend (null while loading or none selected). */
+  friends: FriendSummary[];
+  incoming: FriendRequestSummary[];
+  outgoing: FriendRequestSummary[];
+  loading: boolean;
+
+  selectedId: string | null;
+  /** Live globe data for the selected friend (null while loading or none selected). */
   selectedData: FriendData | null;
-  loadingSlug: string | null;
+  loadingId: string | null;
+
   mapFilter: FriendMapFilter;
   setMapFilter: (f: FriendMapFilter) => void;
-  selectFriend: (slug: string | null) => void;
-  addFriend: (rawInput: string) => Promise<FriendEntry>;
-  removeFriend: (slug: string) => Promise<void>;
+
+  refresh: () => Promise<void>;
+  selectFriend: (friend: FriendSummary | null) => void;
+  /** Send a friend request by @handle. Returns "accepted" if it merged a reverse request. */
+  sendRequest: (username: string) => Promise<"pending" | "accepted">;
+  acceptRequest: (requestId: string) => Promise<void>;
+  rejectRequest: (requestId: string) => Promise<void>;
+  /** Un-friend, or withdraw an outgoing request — both keyed by the other user's id. */
+  removeFriend: (userId: string) => Promise<void>;
 };
+
+const noop = async () => {};
 
 const FriendsContext = createContext<FriendsCtx>({
   friends: [],
-  selectedSlug: null,
+  incoming: [],
+  outgoing: [],
+  loading: true,
+  selectedId: null,
   selectedData: null,
-  loadingSlug: null,
+  loadingId: null,
   mapFilter: "both",
   setMapFilter: () => {},
+  refresh: noop,
   selectFriend: () => {},
-  addFriend: async () => { throw new Error("FriendsProvider missing"); },
-  removeFriend: async () => {},
+  sendRequest: async () => "pending",
+  acceptRequest: noop,
+  rejectRequest: noop,
+  removeFriend: noop,
 });
-
-// ─── Helpers ──────────────────────────────────────────────────────────────────
-
-/** Accepts a bare slug or a full profile URL (…/u/<slug>) and normalizes it. */
-export function normalizeSlugInput(raw: string): string {
-  let s = raw.trim();
-  const uIdx = s.lastIndexOf("/u/");
-  if (uIdx !== -1) s = s.slice(uIdx + 3);
-  return s.replace(/\/+$/, "").replace(/^@/, "").trim().toLowerCase();
-}
 
 const CACHE_TTL_MS = 5 * 60 * 1000;
 
 // ─── Provider ─────────────────────────────────────────────────────────────────
 
 export function FriendsProvider({ children }: { children: React.ReactNode }) {
-  const { user } = useSession();
-  const storageKey = user ? `explrd:friends:${user.id}` : null;
+  const { session, user } = useSession();
+  const token = session?.access_token ?? null;
 
-  const [friends, setFriends] = useState<FriendEntry[]>([]);
-  const [selectedSlug, setSelectedSlug] = useState<string | null>(null);
+  const [friends, setFriends] = useState<FriendSummary[]>([]);
+  const [incoming, setIncoming] = useState<FriendRequestSummary[]>([]);
+  const [outgoing, setOutgoing] = useState<FriendRequestSummary[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [selectedData, setSelectedData] = useState<FriendData | null>(null);
-  const [loadingSlug, setLoadingSlug] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const [mapFilter, setMapFilter] = useState<FriendMapFilter>("both");
 
-  // In-memory cache of fetched friend data, keyed by slug
+  // In-memory cache of fetched friend globes, keyed by username.
   const cacheRef = useRef<Map<string, FriendData>>(new Map());
-  // Mirrors selectedSlug so async fetch callbacks can detect stale selections
-  const selectedSlugRef = useRef<string | null>(null);
-  selectedSlugRef.current = selectedSlug;
+  const selectedIdRef = useRef<string | null>(null);
+  selectedIdRef.current = selectedId;
 
-  // Load persisted friend list when the signed-in user changes
+  // ── Load the social graph ─────────────────────────────────────────────────
+  const refresh = useCallback(async () => {
+    if (!token) {
+      setFriends([]);
+      setIncoming([]);
+      setOutgoing([]);
+      setLoading(false);
+      return;
+    }
+    try {
+      const payload = await fetchFriends(token);
+      setFriends(payload.friends);
+      setIncoming(payload.incoming);
+      setOutgoing(payload.outgoing);
+    } catch (e) {
+      console.warn("FriendsContext refresh:", e);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  // Reset + reload whenever the signed-in user changes.
   useEffect(() => {
     setFriends([]);
-    setSelectedSlug(null);
+    setIncoming([]);
+    setOutgoing([]);
+    setSelectedId(null);
     setSelectedData(null);
     cacheRef.current.clear();
-    if (!storageKey) return;
-    AsyncStorage.getItem(storageKey)
-      .then((json) => {
-        if (json) setFriends(JSON.parse(json) as FriendEntry[]);
-      })
-      .catch((e) => console.warn("FriendsContext load:", e));
-  }, [storageKey]);
+    if (!user) {
+      setLoading(false);
+      return;
+    }
+    setLoading(true);
+    void refresh();
+  }, [user, refresh]);
 
-  const persist = useCallback(
-    (list: FriendEntry[]) => {
-      if (!storageKey) return;
-      AsyncStorage.setItem(storageKey, JSON.stringify(list)).catch((e) =>
-        console.warn("FriendsContext persist:", e),
-      );
+  // ── Friend globe loading ──────────────────────────────────────────────────
+  const loadFriendData = useCallback(
+    async (username: string, fallbackName: string): Promise<FriendData> => {
+      const cached = cacheRef.current.get(username);
+      if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached;
+      const payload = await fetchPublicProfile(username);
+      const data: FriendData = {
+        displayName: payload.profile.display_name ?? fallbackName,
+        places: payload.places,
+        stats: payload.stats,
+        fetchedAt: Date.now(),
+      };
+      cacheRef.current.set(username, data);
+      return data;
     },
-    [storageKey],
+    [],
   );
 
-  const loadFriendData = useCallback(async (slug: string): Promise<FriendData> => {
-    const cached = cacheRef.current.get(slug);
-    if (cached && Date.now() - cached.fetchedAt < CACHE_TTL_MS) return cached;
-    const payload = await fetchPublicProfile(slug);
-    const data: FriendData = {
-      displayName: payload.profile.display_name ?? slug,
-      places: payload.places,
-      stats: payload.stats,
-      fetchedAt: Date.now(),
-    };
-    cacheRef.current.set(slug, data);
-    return data;
-  }, []);
-
   const selectFriend = useCallback(
-    (slug: string | null) => {
-      selectedSlugRef.current = slug;
-      setSelectedSlug(slug);
+    (friend: FriendSummary | null) => {
+      const id = friend?.user_id ?? null;
+      selectedIdRef.current = id;
+      setSelectedId(id);
       setSelectedData(null);
       setMapFilter("both");
-      if (!slug) return;
-      setLoadingSlug(slug);
-      loadFriendData(slug)
+      if (!friend || !friend.username) return;
+      setLoadingId(id);
+      loadFriendData(friend.username, friend.display_name ?? friend.username)
         .then((data) => {
-          // Ignore if the user has since selected someone else
-          if (selectedSlugRef.current === slug) setSelectedData(data);
+          if (selectedIdRef.current === id) setSelectedData(data);
         })
         .catch((e) => console.warn("FriendsContext select:", e))
-        .finally(() => setLoadingSlug((s) => (s === slug ? null : s)));
+        .finally(() => setLoadingId((cur) => (cur === id ? null : cur)));
     },
     [loadFriendData],
   );
 
-  const addFriend = useCallback(
-    async (rawInput: string): Promise<FriendEntry> => {
-      const slug = normalizeSlugInput(rawInput);
-      if (!slug) throw new Error("Enter your friend's profile link or username.");
-      if (friends.some((f) => f.slug === slug)) {
-        throw new Error("You've already added this friend.");
-      }
-      setLoadingSlug(slug);
-      try {
-        const data = await loadFriendData(slug);
-        const entry: FriendEntry = {
-          slug,
-          displayName: data.displayName,
-          addedAt: new Date().toISOString(),
-        };
-        setFriends((prev) => {
-          const next = [...prev, entry];
-          persist(next);
-          return next;
-        });
-        selectedSlugRef.current = slug;
-        setSelectedSlug(slug);
-        setSelectedData(data);
-        setMapFilter("both");
-        return entry;
-      } finally {
-        setLoadingSlug((s) => (s === slug ? null : s));
-      }
+  // ── Mutations (optimistic-ish: act, then refresh the graph) ───────────────
+  const sendRequest = useCallback(
+    async (username: string): Promise<"pending" | "accepted"> => {
+      if (!token) throw new Error("Not signed in.");
+      const res = await sendFriendRequest(token, username);
+      await refresh();
+      return res.status;
     },
-    [friends, loadFriendData, persist],
+    [token, refresh],
+  );
+
+  const acceptRequest = useCallback(
+    async (requestId: string) => {
+      if (!token) return;
+      await respondToFriendRequest(token, requestId, "accept");
+      await refresh();
+    },
+    [token, refresh],
+  );
+
+  const rejectRequest = useCallback(
+    async (requestId: string) => {
+      if (!token) return;
+      await respondToFriendRequest(token, requestId, "reject");
+      await refresh();
+    },
+    [token, refresh],
   );
 
   const removeFriend = useCallback(
-    async (slug: string) => {
-      cacheRef.current.delete(slug);
-      setFriends((prev) => {
-        const next = prev.filter((f) => f.slug !== slug);
-        persist(next);
-        return next;
-      });
-      setSelectedSlug((current) => {
-        if (current === slug) {
-          setSelectedData(null);
-          return null;
-        }
-        return current;
-      });
+    async (userId: string) => {
+      if (!token) return;
+      await apiRemoveFriend(token, userId);
+      if (selectedIdRef.current === userId) {
+        setSelectedId(null);
+        setSelectedData(null);
+      }
+      await refresh();
     },
-    [persist],
+    [token, refresh],
   );
 
-  const value = useMemo(
+  const value = useMemo<FriendsCtx>(
     () => ({
       friends,
-      selectedSlug,
+      incoming,
+      outgoing,
+      loading,
+      selectedId,
       selectedData,
-      loadingSlug,
+      loadingId,
       mapFilter,
       setMapFilter,
+      refresh,
       selectFriend,
-      addFriend,
+      sendRequest,
+      acceptRequest,
+      rejectRequest,
       removeFriend,
     }),
-    [friends, selectedSlug, selectedData, loadingSlug, mapFilter, selectFriend, addFriend, removeFriend],
+    [
+      friends,
+      incoming,
+      outgoing,
+      loading,
+      selectedId,
+      selectedData,
+      loadingId,
+      mapFilter,
+      refresh,
+      selectFriend,
+      sendRequest,
+      acceptRequest,
+      rejectRequest,
+      removeFriend,
+    ],
   );
 
   return (

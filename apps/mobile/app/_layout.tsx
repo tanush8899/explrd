@@ -4,6 +4,7 @@ import { Stack, useRouter } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import * as Linking from "expo-linking";
 import { SessionProvider } from "@/lib/SessionContext";
+import { ProfileProvider } from "@/lib/ProfileContext";
 import { PlacesProvider } from "@/lib/PlacesContext";
 import { FriendsProvider } from "@/lib/FriendsContext";
 import { supabase } from "@/lib/supabaseClient";
@@ -53,16 +54,18 @@ export default function RootLayout() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <StatusBar style="light" />
       <SessionProvider>
-        <PlacesProvider>
-          <FriendsProvider>
-            <DeepLinkHandler />
-            <Stack screenOptions={{ headerShown: false }}>
-              <Stack.Screen name="(auth)" />
-              <Stack.Screen name="(app)" />
-              <Stack.Screen name="s/[token]" />
-            </Stack>
-          </FriendsProvider>
-        </PlacesProvider>
+        <ProfileProvider>
+          <PlacesProvider>
+            <FriendsProvider>
+              <DeepLinkHandler />
+              <Stack screenOptions={{ headerShown: false }}>
+                <Stack.Screen name="(auth)" />
+                <Stack.Screen name="(app)" />
+                <Stack.Screen name="s/[token]" />
+              </Stack>
+            </FriendsProvider>
+          </PlacesProvider>
+        </ProfileProvider>
       </SessionProvider>
     </GestureHandlerRootView>
   );

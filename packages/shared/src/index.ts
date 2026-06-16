@@ -7,3 +7,4 @@ export * from "./stats";
 export * from "./journey";
 export * from "./supabaseFactory";
 export * from "./auth";
+export * from "./username";

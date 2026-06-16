@@ -1,110 +1,64 @@
 import { NextResponse } from "next/server";
-import { createClient } from "@supabase/supabase-js";
+import { validateUsername } from "@explrd/shared";
+import { getAuthedUser, serverError } from "@/lib/api-auth";
 import type { UserProfile } from "@/lib/types";
 
-type ProfileBody = {
-  display_name?: string;
-  public_slug?: string;
-  bio?: string;
-  is_public?: boolean;
-};
+export const runtime = "nodejs";
 
-function normalizeSlug(value: string) {
-  return value
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "")
-    .slice(0, 32);
-}
+const PROFILE_COLUMNS =
+  "user_id, username, first_name, last_name, display_name, public_slug, bio, is_public, created_at, updated_at";
+
+type ProfileBody = {
+  first_name?: string;
+  last_name?: string;
+  username?: string;
+};
 
 function defaultDisplayName(email: string | null | undefined) {
   if (!email) return "Explr Traveler";
   return email.split("@")[0] || "Explr Traveler";
 }
 
-async function getAuthedUser(req: Request) {
-  const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
-
-  if (!supabaseUrl || !serviceKey) {
-    return {
-      response: NextResponse.json(
-        {
-          error: "missing_env",
-          details: "NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing.",
-        },
-        { status: 500 }
-      ),
-    };
-  }
-
-  const supabase = createClient(supabaseUrl, serviceKey);
-  const authHeader = req.headers.get("authorization") ?? "";
-  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
-
-  if (!token) {
-    return {
-      response: NextResponse.json({ error: "missing_token" }, { status: 401 }),
-    };
-  }
-
-  const { data: userData, error: userErr } = await supabase.auth.getUser(token);
-  const user = userData.user ?? null;
-
-  if (userErr || !user) {
-    return {
-      response: NextResponse.json(
-        { error: "invalid_token", details: userErr?.message ?? "No user found" },
-        { status: 401 }
-      ),
-    };
-  }
-
-  return { supabase, user };
+function fullName(first: string, last: string, fallback: string) {
+  const name = [first, last].map((s) => s.trim()).filter(Boolean).join(" ");
+  return name || fallback;
 }
-
-export const runtime = "nodejs";
 
 export async function GET(req: Request) {
   try {
     const auth = await getAuthedUser(req);
     if ("response" in auth) return auth.response;
-
     const { supabase, user } = auth;
 
     const { data, error } = await supabase
       .from("profiles")
-      .select("user_id, display_name, public_slug, bio, is_public, created_at, updated_at")
+      .select(PROFILE_COLUMNS)
       .eq("user_id", user.id)
       .maybeSingle<UserProfile>();
 
     if (error) {
       return NextResponse.json(
         { error: "profile_query_failed", details: error.message },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     const profile: UserProfile = data ?? {
       user_id: user.id,
+      username: null,
+      first_name: null,
+      last_name: null,
       display_name: defaultDisplayName(user.email),
       public_slug: null,
       bio: null,
-      is_public: false,
+      is_public: true,
       created_at: null,
       updated_at: null,
     };
 
     return NextResponse.json({ profile });
-  } catch (e: unknown) {
-    return NextResponse.json(
-      {
-        error: "server_exception",
-        details: e instanceof Error ? e.message : String(e),
-      },
-      { status: 500 }
-    );
+  } catch (e) {
+    return serverError(e);
   }
 }
 
@@ -112,82 +66,85 @@ export async function PUT(req: Request) {
   try {
     const auth = await getAuthedUser(req);
     if ("response" in auth) return auth.response;
-
     const { supabase, user } = auth;
+
     const body = (await req.json()) as ProfileBody;
+    const firstName = (body.first_name ?? "").trim();
+    const lastName = (body.last_name ?? "").trim();
 
-    const displayName = body.display_name?.trim() ?? "";
-    const bio = body.bio?.trim() ?? "";
-    const isPublic = Boolean(body.is_public);
-    const publicSlug = normalizeSlug(body.public_slug ?? "");
-
-    if (!displayName) {
+    if (!firstName) {
       return NextResponse.json(
-        { error: "bad_request", details: "Display name is required." },
-        { status: 400 }
+        { error: "bad_request", details: "First name is required." },
+        { status: 400 },
       );
     }
 
-    if (isPublic && !publicSlug) {
+    const check = validateUsername(body.username ?? "");
+    if (!check.ok) {
       return NextResponse.json(
-        { error: "bad_request", details: "A public username is required to make a profile public." },
-        { status: 400 }
+        { error: "bad_username", details: check.reason },
+        { status: 400 },
+      );
+    }
+    const username = check.value;
+
+    // Uniqueness — case-insensitive, excluding the caller's own row.
+    const { data: existing, error: dupErr } = await supabase
+      .from("profiles")
+      .select("user_id")
+      .ilike("username", username)
+      .maybeSingle<{ user_id: string }>();
+
+    if (dupErr) {
+      return NextResponse.json(
+        { error: "username_check_failed", details: dupErr.message },
+        { status: 500 },
+      );
+    }
+    if (existing && existing.user_id !== user.id) {
+      return NextResponse.json(
+        { error: "username_taken", details: "That username is already taken." },
+        { status: 409 },
       );
     }
 
-    if (publicSlug) {
-      const { data: existingProfile, error: slugErr } = await supabase
-        .from("profiles")
-        .select("user_id")
-        .eq("public_slug", publicSlug)
-        .maybeSingle<{ user_id: string }>();
-
-      if (slugErr) {
-        return NextResponse.json(
-          { error: "slug_check_failed", details: slugErr.message },
-          { status: 500 }
-        );
-      }
-
-      if (existingProfile && existingProfile.user_id !== user.id) {
-        return NextResponse.json(
-          { error: "slug_taken", details: "That public username is already in use." },
-          { status: 409 }
-        );
-      }
-    }
+    const displayName = fullName(firstName, lastName, defaultDisplayName(user.email));
 
     const { data, error } = await supabase
       .from("profiles")
       .upsert(
         {
           user_id: user.id,
+          username,
+          first_name: firstName,
+          last_name: lastName || null,
           display_name: displayName,
-          public_slug: publicSlug || null,
-          bio: bio || null,
-          is_public: isPublic,
+          // Mirror so existing /u/<slug> public pages keep resolving by handle.
+          public_slug: username,
+          is_public: true,
           updated_at: new Date().toISOString(),
         },
-        { onConflict: "user_id" }
+        { onConflict: "user_id" },
       )
-      .select("user_id, display_name, public_slug, bio, is_public, created_at, updated_at")
+      .select(PROFILE_COLUMNS)
       .single<UserProfile>();
 
     if (error) {
+      // Unique-violation race (two requests claimed the same handle at once).
+      if (error.code === "23505") {
+        return NextResponse.json(
+          { error: "username_taken", details: "That username is already taken." },
+          { status: 409 },
+        );
+      }
       return NextResponse.json(
         { error: "profile_upsert_failed", details: error.message },
-        { status: 500 }
+        { status: 500 },
       );
     }
 
     return NextResponse.json({ profile: data });
-  } catch (e: unknown) {
-    return NextResponse.json(
-      {
-        error: "server_exception",
-        details: e instanceof Error ? e.message : String(e),
-      },
-      { status: 500 }
-    );
+  } catch (e) {
+    return serverError(e);
   }
 }

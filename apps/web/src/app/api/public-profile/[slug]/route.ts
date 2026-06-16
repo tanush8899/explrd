@@ -83,7 +83,7 @@ export async function GET(_: Request, context: RouteContext) {
 
     const { data: profile, error: profileErr } = await supabase
       .from("profiles")
-      .select("user_id, display_name, public_slug, bio, is_public, created_at, updated_at")
+      .select("user_id, username, first_name, last_name, display_name, public_slug, bio, is_public, created_at, updated_at")
       .eq("public_slug", slug)
       .eq("is_public", true)
       .maybeSingle<UserProfile>();
