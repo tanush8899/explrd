@@ -370,12 +370,24 @@ function WorldMeterCard({
   total?: number;
   color: string;
 }) {
-  // Bounded metrics fill toward their real total; cities (unbounded) use a soft
-  // log curve so the bar still reads as progress.
-  const pct = total
-    ? Math.min((value / total) * 100, 100)
-    : Math.min((Math.log1p(value) / Math.log1p(120)) * 100, 100);
-  const left = total ? Math.max(total - value, 0) : null;
+  // Unbounded tally (cities) — no honest denominator, so show a count, not a
+  // slider that begs the question "out of what?".
+  if (total == null) {
+    return (
+      <View style={styles.meterCard}>
+        <View style={styles.meterCardTop}>
+          <Text style={styles.meterCardLabel}>{label}</Text>
+          <Text style={styles.meterCardValue}>{value}</Text>
+        </View>
+        <Text style={styles.meterCardSub}>
+          {value === 1 ? "city" : "cities"} explored — and counting
+        </Text>
+      </View>
+    );
+  }
+
+  const pct = Math.min((value / total) * 100, 100);
+  const left = Math.max(total - value, 0);
 
   return (
     <View style={styles.meterCard}>
@@ -383,16 +395,12 @@ function WorldMeterCard({
         <Text style={styles.meterCardLabel}>{label}</Text>
         <Text style={styles.meterCardValue}>
           {value}
-          {total ? <Text style={styles.meterCardTotal}> / {total}</Text> : null}
+          <Text style={styles.meterCardTotal}> / {total}</Text>
         </Text>
       </View>
       <AnimatedBar pct={pct} height={8} fillColor={color} trackColor="#eceef1" />
       <Text style={styles.meterCardSub}>
-        {left != null
-          ? left > 0
-            ? `${left} to go`
-            : "Every one explored 🎉"
-          : `${value} ${value === 1 ? "city" : "cities"} stamped`}
+        {left > 0 ? `${left} to go` : "Every one explored 🎉"}
       </Text>
     </View>
   );

@@ -129,11 +129,11 @@ export default function AddPlacePanel({
         country_boundary: null,
         continent_boundary: null,
       } satisfies SavedPlace);
-      // Clear selection and go back to search
+      // Hand control to the parent — it plays the stamp and navigates to My Places.
+      // (No snap/deselect here; that used to fight the parent's transition.)
       setSelected(null);
       setQuery("");
       setResults([]);
-      onDeselectPlace();
     } catch (e: unknown) {
       setError((e as Error)?.message ?? "Failed to save. Try again.");
     } finally {

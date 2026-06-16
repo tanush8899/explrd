@@ -53,8 +53,6 @@ export default function MainScreen() {
   // Ref so onSnap callback can read activeTab without stale closure
   const activeTabRef = useRef<ActiveTab>(activeTab);
   activeTabRef.current = activeTab;
-  // Prevents handleSnap from clearing the preview when save itself triggers the snap
-  const isSavingRef = useRef(false);
 
   const fullName = [profile?.first_name, profile?.last_name]
     .filter(Boolean)
@@ -128,7 +126,6 @@ export default function MainScreen() {
   // to pill while in the add/search flow, exit the flow entirely.
   // Guard: skip during programmatic save-snap so the map/polygon stays visible.
   const handleSnap = useCallback((i: 0 | 1 | 2) => {
-    if (isSavingRef.current) return;
     if (activeTabRef.current === "add" && i === 0) {
       Keyboard.dismiss();
       setPreviewCoord(null);
@@ -169,13 +166,14 @@ export default function MainScreen() {
           : [optimistic, ...prev],
       );
       refresh();
-      setStampPlace(optimistic);
-      // Collapse sheet to pill — user stays in add tab so they can search again.
-      // isSavingRef prevents handleSnap from switching tabs during this programmatic snap.
+      // One clean transition: dismiss the keyboard, clear the search preview, play
+      // the stamp celebration, and land the user on their passport (My Places) with
+      // the new place at the top. A single snap — no fighting programmatic snaps.
       Keyboard.dismiss();
-      isSavingRef.current = true;
-      sheetRef.current?.snapTo(0);
-      setTimeout(() => { isSavingRef.current = false; }, 600);
+      setPreviewCoord(null);
+      setStampPlace(optimistic);
+      setActiveTab("places");
+      sheetRef.current?.snapTo(1);
     },
     [setPlaces, refresh],
   );

@@ -314,29 +314,36 @@ function HeroMeter({
 }: {
   label: string;
   value: number;
+  /** Real-world ceiling. Omit for unbounded tallies (cities) → shown as a count. */
   total?: number;
   color: string;
 }) {
-  // Bounded metrics fill toward their real total; cities (unbounded) use a soft
-  // log curve just so the bar reads as "progress".
-  const pct = total
-    ? Math.min((value / total) * 100, 100)
-    : Math.min((Math.log1p(value) / Math.log1p(120)) * 100, 100);
-  const left = total ? Math.max(total - value, 0) : null;
+  // Unbounded tally — no honest denominator, so show a clean count, not a slider.
+  if (total == null) {
+    return (
+      <View style={styles.meterBlock}>
+        <View style={styles.meterTop}>
+          <Text style={styles.meterLabel}>{label}</Text>
+          <Text style={styles.meterValue}>{value}</Text>
+        </View>
+        <Text style={styles.meterLeft}>{value === 1 ? "city" : "cities"} explored</Text>
+      </View>
+    );
+  }
+
+  const pct = Math.min((value / total) * 100, 100);
+  const left = Math.max(total - value, 0);
 
   return (
     <View style={styles.meterBlock}>
       <View style={styles.meterTop}>
         <Text style={styles.meterLabel}>{label}</Text>
         <Text style={styles.meterValue}>
-          {total ? `${value} ` : value}
-          {total ? <Text style={styles.meterTotal}>/ {total}</Text> : null}
+          {value} <Text style={styles.meterTotal}>/ {total}</Text>
         </Text>
       </View>
       <AnimatedBar pct={pct} height={5} fillColor={color} trackColor="rgba(255,255,255,0.12)" />
-      {left != null && left > 0 ? (
-        <Text style={styles.meterLeft}>{left} to go</Text>
-      ) : null}
+      {left > 0 ? <Text style={styles.meterLeft}>{left} to go</Text> : null}
     </View>
   );
 }

@@ -9,8 +9,8 @@ type Props = {
   onDismiss: () => void;
 };
 
-const HOLD_MS   = 2000;
-const FADE_MS   = 480;
+const HOLD_MS   = 1500;
+const FADE_MS   = 420;
 const TOTAL_MS  = HOLD_MS + FADE_MS;
 
 export default function PassportStamp({ place, onDismiss }: Props) {
