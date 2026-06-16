@@ -49,7 +49,9 @@ export const colors = {
 // ── Gradients (the signature hero cards) ─────────────────────────────────────
 export const gradients = {
   hero:     ["#0f1829", "#1a3050"] as [string, string], // stats / VS / score
-  passport: ["#2a1a58", "#111827", "#0a0f1a"] as [string, string, string],
+  // Passport / splash — deep navy in the app's signature blue family (was a
+  // off-brand purple). Peaks at the hero blue, settles near-black for depth.
+  passport: ["#0f1d38", "#1a3050", "#0a0f1c"] as [string, string, string],
   progress: ["#3b82f6", "#8b5cf6"] as [string, string],
   auth:     ["#0c1023", "#080b16", "#05070d"] as [string, string, string],
 } as const;

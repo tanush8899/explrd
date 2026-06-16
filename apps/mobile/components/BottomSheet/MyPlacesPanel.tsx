@@ -10,7 +10,7 @@ import {
 import { SheetScrollContext } from "@/components/Sheet";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { getExplrdStats, getPlaceHierarchy } from "@explrd/shared";
+import { getExplrdStats, getPlaceHierarchy, nextCityMilestone } from "@explrd/shared";
 import type { ContinentNode, CountryNode, SavedPlace } from "@explrd/shared";
 import { countryFlag } from "@/lib/flags";
 import AnimatedBar from "@/components/AnimatedBar";
@@ -106,7 +106,9 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
           <HeroMeter
             label="Cities"
             value={stats.uniqueCities}
+            total={nextCityMilestone(stats.uniqueCities)}
             color="#6ee7b7"
+            milestone
           />
         </View>
       </LinearGradient>
@@ -311,26 +313,15 @@ function HeroMeter({
   value,
   total,
   color,
+  milestone = false,
 }: {
   label: string;
   value: number;
-  /** Real-world ceiling. Omit for unbounded tallies (cities) → shown as a count. */
-  total?: number;
+  total: number;
   color: string;
+  /** Cities: `total` is a rolling milestone, not a world ceiling. */
+  milestone?: boolean;
 }) {
-  // Unbounded tally — no honest denominator, so show a clean count, not a slider.
-  if (total == null) {
-    return (
-      <View style={styles.meterBlock}>
-        <View style={styles.meterTop}>
-          <Text style={styles.meterLabel}>{label}</Text>
-          <Text style={styles.meterValue}>{value}</Text>
-        </View>
-        <Text style={styles.meterLeft}>{value === 1 ? "city" : "cities"} explored</Text>
-      </View>
-    );
-  }
-
   const pct = Math.min((value / total) * 100, 100);
   const left = Math.max(total - value, 0);
 
@@ -339,11 +330,16 @@ function HeroMeter({
       <View style={styles.meterTop}>
         <Text style={styles.meterLabel}>{label}</Text>
         <Text style={styles.meterValue}>
-          {value} <Text style={styles.meterTotal}>/ {total}</Text>
+          {value}
+          {milestone ? null : <Text style={styles.meterTotal}> / {total}</Text>}
         </Text>
       </View>
       <AnimatedBar pct={pct} height={5} fillColor={color} trackColor="rgba(255,255,255,0.12)" />
-      {left > 0 ? <Text style={styles.meterLeft}>{left} to go</Text> : null}
+      {left > 0 ? (
+        <Text style={styles.meterLeft}>
+          {milestone ? `${left} to ${total}` : `${left} to go`}
+        </Text>
+      ) : null}
     </View>
   );
 }

@@ -12,7 +12,12 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import * as Sharing from "expo-sharing";
 import { type ViewShotRef } from "react-native-view-shot";
-import { getExplrdStats, getContinentSummary, getCountryCoverage } from "@explrd/shared";
+import {
+  getExplrdStats,
+  getContinentSummary,
+  getCountryCoverage,
+  nextCityMilestone,
+} from "@explrd/shared";
 import type { SavedPlace } from "@explrd/shared";
 import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
@@ -205,7 +210,9 @@ export default function SharePanel({ places }: Props) {
           <WorldMeterCard
             label="Cities"
             value={stats.uniqueCities}
+            total={nextCityMilestone(stats.uniqueCities)}
             color="#10b981"
+            milestone
           />
 
           {/* ── Highlights ───────────────────────────────────────────────────── */}
@@ -364,28 +371,15 @@ function WorldMeterCard({
   value,
   total,
   color,
+  milestone = false,
 }: {
   label: string;
   value: number;
-  total?: number;
+  total: number;
   color: string;
+  /** Cities: `total` is a rolling milestone, not a world ceiling — labelled so. */
+  milestone?: boolean;
 }) {
-  // Unbounded tally (cities) — no honest denominator, so show a count, not a
-  // slider that begs the question "out of what?".
-  if (total == null) {
-    return (
-      <View style={styles.meterCard}>
-        <View style={styles.meterCardTop}>
-          <Text style={styles.meterCardLabel}>{label}</Text>
-          <Text style={styles.meterCardValue}>{value}</Text>
-        </View>
-        <Text style={styles.meterCardSub}>
-          {value === 1 ? "city" : "cities"} explored — and counting
-        </Text>
-      </View>
-    );
-  }
-
   const pct = Math.min((value / total) * 100, 100);
   const left = Math.max(total - value, 0);
 
@@ -395,12 +389,18 @@ function WorldMeterCard({
         <Text style={styles.meterCardLabel}>{label}</Text>
         <Text style={styles.meterCardValue}>
           {value}
-          <Text style={styles.meterCardTotal}> / {total}</Text>
+          {milestone ? null : <Text style={styles.meterCardTotal}> / {total}</Text>}
         </Text>
       </View>
       <AnimatedBar pct={pct} height={8} fillColor={color} trackColor="#eceef1" />
       <Text style={styles.meterCardSub}>
-        {left > 0 ? `${left} to go` : "Every one explored 🎉"}
+        {milestone
+          ? left > 0
+            ? `${left} to your next milestone · ${total}`
+            : "Milestone reached 🎉"
+          : left > 0
+            ? `${left} to go`
+            : "Every one explored 🎉"}
       </Text>
     </View>
   );

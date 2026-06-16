@@ -13,7 +13,8 @@ export type PassportCardProps = {
 // forwardRef so SharePanel can call .capture() on the ViewShot inside
 const PassportCard = forwardRef<ViewShotRef, PassportCardProps>(
   ({ displayName, stats }, ref) => {
-    const pct = Math.min(Math.round(stats.percentWorldTraveled), 100);
+    // Keep one decimal — "4.9%" not a rounded "5%".
+    const pct = Math.min(stats.percentWorldTraveled, 100);
     const today = new Date().toLocaleDateString("en-US", {
       month: "long",
       day: "numeric",
