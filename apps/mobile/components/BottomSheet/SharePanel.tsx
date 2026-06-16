@@ -9,7 +9,6 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import * as Sharing from "expo-sharing";
 import { type ViewShotRef } from "react-native-view-shot";
@@ -17,22 +16,27 @@ import { getExplrdStats, getContinentSummary, getCountryCoverage } from "@explrd
 import type { SavedPlace } from "@explrd/shared";
 import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
+import { useProfile } from "@/lib/ProfileContext";
 import PassportCard from "@/components/PassportCard";
-import { colors, gradients } from "@/lib/theme";
+import AnimatedBar from "@/components/AnimatedBar";
+import { colors } from "@/lib/theme";
+
+// Finite world totals so each meter can show "X of Y" + how much is left.
+const WORLD_COUNTRIES = 195;
+const WORLD_CONTINENTS = 7;
 
 type Props = {
   places: SavedPlace[];
 };
 
-// ─── Score tier ───────────────────────────────────────────────────────────────
-
-function scoreTier(score: number): { label: string; emoji: string; color: string } {
-  if (score >= 1000) return { label: "Legendary Explorer", emoji: "🌍", color: "#f59e0b" };
-  if (score >= 500)  return { label: "World Traveler",     emoji: "✈️", color: "#3b82f6" };
-  if (score >= 300)  return { label: "Globetrotter",       emoji: "🗺️", color: "#8b5cf6" };
-  if (score >= 150)  return { label: "Adventurer",         emoji: "⛺", color: "#10b981" };
-  if (score >= 50)   return { label: "Explorer",           emoji: "🧭", color: "#06b6d4" };
-  return                    { label: "Wanderer",            emoji: "👣", color: "#868c94" };
+/** "tanush_sanjay" / "tanush sanjay" → "Tanush Sanjay". */
+function titleCase(s: string): string {
+  return s
+    .replace(/[._-]+/g, " ")
+    .trim()
+    .split(/\s+/)
+    .map((w) => (w ? w[0].toUpperCase() + w.slice(1) : w))
+    .join(" ");
 }
 
 // ─── Derived insights ─────────────────────────────────────────────────────────
@@ -94,21 +98,28 @@ function latDir(lat: number) { return lat >= 0 ? "N" : "S"; }
 
 export default function SharePanel({ places }: Props) {
   const { user } = useSession();
+  const { profile } = useProfile();
   const shotRef = useRef<ViewShotRef>(null);
   const [capturing, setCapturing] = useState(false);
 
   const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
 
-  const displayName =
-    (user?.user_metadata?.full_name as string | undefined) ??
-    user?.email?.split("@")[0] ??
-    "Explorer";
+  const displayName = useMemo(() => {
+    const fromProfile =
+      profile?.display_name ||
+      [profile?.first_name, profile?.last_name].filter(Boolean).join(" ");
+    const raw =
+      fromProfile ||
+      (user?.user_metadata?.full_name as string | undefined) ||
+      user?.email?.split("@")[0] ||
+      "Explorer";
+    return titleCase(raw);
+  }, [profile, user]);
 
   const stats     = useMemo(() => getExplrdStats(places),       [places]);
   const continents = useMemo(() => getContinentSummary(places), [places]);
   const countries  = useMemo(() => getCountryCoverage(places),  [places]);
   const insights   = useMemo(() => deriveInsights(places),      [places]);
-  const tier       = scoreTier(stats.score);
 
   const handleShare = async () => {
     if (!shotRef.current || capturing) return;
@@ -144,21 +155,27 @@ export default function SharePanel({ places }: Props) {
         }
       }}
     >
-      {/* ── Passport card + share icon ─────────────────────────────────────── */}
+      {/* ── Passport card ──────────────────────────────────────────────────── */}
       <View style={styles.cardWrapper}>
         <PassportCard ref={shotRef} displayName={displayName} stats={stats} />
-        <TouchableOpacity
-          style={styles.shareOverlay}
-          onPress={handleShare}
-          disabled={capturing}
-          activeOpacity={0.8}
-          hitSlop={8}
-        >
-          {capturing
-            ? <ActivityIndicator size="small" color="#ffffff" />
-            : <Ionicons name="share-outline" size={18} color="#ffffff" />}
-        </TouchableOpacity>
       </View>
+
+      {/* Share lives in its own button so it never overlaps the card's date. */}
+      <TouchableOpacity
+        style={styles.shareBtn}
+        onPress={handleShare}
+        disabled={capturing}
+        activeOpacity={0.85}
+      >
+        {capturing ? (
+          <ActivityIndicator size="small" color={colors.blue} />
+        ) : (
+          <>
+            <Ionicons name="share-outline" size={17} color={colors.blue} />
+            <Text style={styles.shareBtnText}>Share Passport</Text>
+          </>
+        )}
+      </TouchableOpacity>
 
       {places.length === 0 && (
         <View style={styles.emptyBox}>
@@ -171,54 +188,25 @@ export default function SharePanel({ places }: Props) {
 
       {places.length > 0 && (
         <>
-          {/* ── Explorer Score ──────────────────────────────────────────────── */}
-          <View style={styles.scoreCardWrapper}>
-            <LinearGradient
-              colors={gradients.hero}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 1 }}
-              style={styles.scoreCard}
-            >
-              <View style={styles.scoreTop}>
-                <View>
-                  <Text style={styles.scoreEyebrow}>EXPLORER SCORE</Text>
-                  <Text style={styles.scoreNum}>{stats.score.toLocaleString()}</Text>
-                </View>
-                <View style={[styles.tierBadge, { borderColor: tier.color + "66" }]}>
-                  <Text style={styles.tierEmoji}>{tier.emoji}</Text>
-                  <Text style={[styles.tierLabel, { color: tier.color }]}>{tier.label}</Text>
-                </View>
-              </View>
-              <View style={styles.scoreBreakdown}>
-                <ScoreBar label="Countries" value={stats.uniqueCountries} max={195} color="#3b82f6" />
-                <ScoreBar label="Regions"   value={stats.uniqueStates}   max={500} color="#8b5cf6" />
-                <ScoreBar label="Cities"    value={stats.uniqueCities}   max={1000} color="#10b981" />
-              </View>
-            </LinearGradient>
-          </View>
-
-          {/* ── World Explored Breakdown ─────────────────────────────────────── */}
+          {/* ── World Explored — sleek progress meters ───────────────────────── */}
           <SectionHeading>World Explored</SectionHeading>
-          <View style={styles.breakdownRow}>
-            <BreakdownCard
-              value={`${stats.worldExploredBreakdown.countries}%`}
-              label="Country depth"
-              sub="of global territory reached"
-              color="#3b82f6"
-            />
-            <BreakdownCard
-              value={`${stats.worldExploredBreakdown.regions}%`}
-              label="Region depth"
-              sub="explored within countries"
-              color="#8b5cf6"
-            />
-            <BreakdownCard
-              value={`${stats.worldExploredBreakdown.cities}%`}
-              label="City depth"
-              sub="urban exploration score"
-              color="#10b981"
-            />
-          </View>
+          <WorldMeterCard
+            label="Countries"
+            value={stats.uniqueCountries}
+            total={WORLD_COUNTRIES}
+            color="#3b82f6"
+          />
+          <WorldMeterCard
+            label="Continents"
+            value={stats.uniqueContinents}
+            total={WORLD_CONTINENTS}
+            color="#8b5cf6"
+          />
+          <WorldMeterCard
+            label="Cities"
+            value={stats.uniqueCities}
+            color="#10b981"
+          />
 
           {/* ── Highlights ───────────────────────────────────────────────────── */}
           {insights && (
@@ -371,27 +359,41 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   return <Text style={styles.sectionHeading}>{children}</Text>;
 }
 
-function ScoreBar({ label, value, max, color }: { label: string; value: number; max: number; color: string }) {
-  const pct = Math.min((value / max) * 100, 100);
-  return (
-    <View style={styles.scoreBarBlock}>
-      <View style={styles.scoreBarMeta}>
-        <Text style={styles.scoreBarLabel}>{label}</Text>
-        <Text style={[styles.scoreBarValue, { color }]}>{value}</Text>
-      </View>
-      <View style={styles.scoreBarTrack}>
-        <View style={[styles.scoreBarFill, { width: `${pct || 1}%`, backgroundColor: color }]} />
-      </View>
-    </View>
-  );
-}
+function WorldMeterCard({
+  label,
+  value,
+  total,
+  color,
+}: {
+  label: string;
+  value: number;
+  total?: number;
+  color: string;
+}) {
+  // Bounded metrics fill toward their real total; cities (unbounded) use a soft
+  // log curve so the bar still reads as progress.
+  const pct = total
+    ? Math.min((value / total) * 100, 100)
+    : Math.min((Math.log1p(value) / Math.log1p(120)) * 100, 100);
+  const left = total ? Math.max(total - value, 0) : null;
 
-function BreakdownCard({ value, label, sub, color }: { value: string; label: string; sub: string; color: string }) {
   return (
-    <View style={styles.breakdownCard}>
-      <Text style={[styles.breakdownValue, { color }]}>{value}</Text>
-      <Text style={styles.breakdownLabel}>{label}</Text>
-      <Text style={styles.breakdownSub}>{sub}</Text>
+    <View style={styles.meterCard}>
+      <View style={styles.meterCardTop}>
+        <Text style={styles.meterCardLabel}>{label}</Text>
+        <Text style={styles.meterCardValue}>
+          {value}
+          {total ? <Text style={styles.meterCardTotal}> / {total}</Text> : null}
+        </Text>
+      </View>
+      <AnimatedBar pct={pct} height={8} fillColor={color} trackColor="#eceef1" />
+      <Text style={styles.meterCardSub}>
+        {left != null
+          ? left > 0
+            ? `${left} to go`
+            : "Every one explored 🎉"
+          : `${value} ${value === 1 ? "city" : "cities"} stamped`}
+      </Text>
     </View>
   );
 }
@@ -452,19 +454,43 @@ const styles = StyleSheet.create({
     shadowRadius: 24,
     elevation: 10,
   },
-  shareOverlay: {
-    position: "absolute",
-    top: 12,
-    right: 12,
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: "rgba(255,255,255,0.18)",
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
+  shareBtn: {
+    flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
+    gap: 7,
+    marginTop: -8,
+    marginBottom: 4,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: colors.blueSoft,
   },
+  shareBtnText: { fontSize: 15, fontWeight: "700", color: colors.blue },
+
+  // World Explored meter cards
+  meterCard: {
+    backgroundColor: "#ffffff",
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: "#f0f1f2",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  meterCardTop: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    marginBottom: 11,
+  },
+  meterCardLabel: { fontSize: 15, fontWeight: "700", color: "#111214", letterSpacing: -0.2 },
+  meterCardValue: { fontSize: 17, fontWeight: "800", color: "#111214", letterSpacing: -0.3 },
+  meterCardTotal: { fontSize: 14, fontWeight: "600", color: "#a0a7b0" },
+  meterCardSub: { fontSize: 11, color: "#868c94", marginTop: 8, fontWeight: "500" },
 
   // Empty
   emptyBox: {

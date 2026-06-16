@@ -35,7 +35,7 @@ const PassportCard = forwardRef<ViewShotRef, PassportCardProps>(
 
           {/* Header */}
           <View style={styles.headerRow}>
-            <Text style={styles.headerLeft}>EXPLR PASSPORT</Text>
+            <Text style={styles.headerLeft}>EXPLRD PASSPORT</Text>
             <Text style={styles.headerRight}>{today}</Text>
           </View>
           <View style={styles.divider} />
@@ -76,7 +76,7 @@ const PassportCard = forwardRef<ViewShotRef, PassportCardProps>(
           {/* Footer */}
           <View style={styles.divider} />
           <View style={styles.footerRow}>
-            <Text style={styles.footerLeft}>explr</Text>
+            <Text style={styles.footerLeft}>explrd</Text>
             <Text style={styles.footerRight}>Keep Exploring</Text>
           </View>
         </LinearGradient>

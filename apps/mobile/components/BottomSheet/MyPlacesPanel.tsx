@@ -13,7 +13,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { getExplrdStats, getPlaceHierarchy } from "@explrd/shared";
 import type { ContinentNode, CountryNode, SavedPlace } from "@explrd/shared";
 import { countryFlag } from "@/lib/flags";
+import AnimatedBar from "@/components/AnimatedBar";
 import { colors, gradients, radius, space, type as t, shadow } from "@/lib/theme";
+
+// Finite world totals used to show "X of Y" + how much is left.
+const WORLD_COUNTRIES = 195;
+const WORLD_CONTINENTS = 7;
 
 type Props = {
   places: SavedPlace[];
@@ -69,17 +74,12 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
         end={{ x: 1, y: 1 }}
         style={styles.hero}
       >
-        <View style={styles.heroTop}>
-          <Text style={styles.heroEyebrow}>WORLD EXPLORED</Text>
-          <View style={styles.heroChip}>
-            <Ionicons name="earth" size={12} color={colors.onDarkSecondary} />
-            <Text style={styles.heroChipText}>
-              {stats.uniqueCountries} {stats.uniqueCountries === 1 ? "country" : "countries"}
-            </Text>
-          </View>
-        </View>
+        <Text style={styles.heroEyebrow}>WORLD EXPLORED</Text>
 
-        <Text style={styles.heroPct}>{stats.percentWorldTraveled}%</Text>
+        <View style={styles.heroPctRow}>
+          <Text style={styles.heroPct}>{stats.percentWorldTraveled}%</Text>
+          <Text style={styles.heroPctCaption}>of the planet</Text>
+        </View>
 
         <View style={styles.heroTrack}>
           <LinearGradient
@@ -90,12 +90,24 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
           />
         </View>
 
-        <View style={styles.heroStats}>
-          <HeroStat value={stats.uniqueCities} label="Cities" />
-          <View style={styles.heroDivider} />
-          <HeroStat value={stats.uniqueCountries} label="Countries" />
-          <View style={styles.heroDivider} />
-          <HeroStat value={stats.uniqueContinents} label="Continents" />
+        <View style={styles.heroBars}>
+          <HeroMeter
+            label="Countries"
+            value={stats.uniqueCountries}
+            total={WORLD_COUNTRIES}
+            color="#7cb1ff"
+          />
+          <HeroMeter
+            label="Continents"
+            value={stats.uniqueContinents}
+            total={WORLD_CONTINENTS}
+            color="#b39bff"
+          />
+          <HeroMeter
+            label="Cities"
+            value={stats.uniqueCities}
+            color="#6ee7b7"
+          />
         </View>
       </LinearGradient>
 
@@ -292,13 +304,39 @@ function PlaceRow({
   );
 }
 
-// ─── Hero stat ───────────────────────────────────────────────────────────────
+// ─── Hero meter (sliding progress bar) ───────────────────────────────────────
 
-function HeroStat({ value, label }: { value: number; label: string }) {
+function HeroMeter({
+  label,
+  value,
+  total,
+  color,
+}: {
+  label: string;
+  value: number;
+  total?: number;
+  color: string;
+}) {
+  // Bounded metrics fill toward their real total; cities (unbounded) use a soft
+  // log curve just so the bar reads as "progress".
+  const pct = total
+    ? Math.min((value / total) * 100, 100)
+    : Math.min((Math.log1p(value) / Math.log1p(120)) * 100, 100);
+  const left = total ? Math.max(total - value, 0) : null;
+
   return (
-    <View style={styles.heroStat}>
-      <Text style={styles.heroStatValue}>{value}</Text>
-      <Text style={styles.heroStatLabel}>{label}</Text>
+    <View style={styles.meterBlock}>
+      <View style={styles.meterTop}>
+        <Text style={styles.meterLabel}>{label}</Text>
+        <Text style={styles.meterValue}>
+          {total ? `${value} ` : value}
+          {total ? <Text style={styles.meterTotal}>/ {total}</Text> : null}
+        </Text>
+      </View>
+      <AnimatedBar pct={pct} height={5} fillColor={color} trackColor="rgba(255,255,255,0.12)" />
+      {left != null && left > 0 ? (
+        <Text style={styles.meterLeft}>{left} to go</Text>
+      ) : null}
     </View>
   );
 }
@@ -319,36 +357,26 @@ const styles = StyleSheet.create({
     marginBottom: space.xxl,
     ...shadow.hero,
   },
-  heroTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
   heroEyebrow: {
     ...t.eyebrow,
     color: colors.onDarkSecondary,
   },
-  heroChip: {
+  heroPctRow: {
     flexDirection: "row",
-    alignItems: "center",
-    gap: 5,
-    backgroundColor: colors.onDarkFill,
-    borderRadius: radius.pill,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  heroChipText: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: colors.onDarkSecondary,
-    letterSpacing: -0.1,
+    alignItems: "baseline",
+    gap: 8,
+    marginTop: space.sm,
   },
   heroPct: {
     fontSize: 52,
     fontWeight: "800",
     letterSpacing: -1.6,
     color: colors.onDark,
-    marginTop: space.sm,
+  },
+  heroPctCaption: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.onDarkMuted,
   },
   heroTrack: {
     height: 6,
@@ -359,27 +387,36 @@ const styles = StyleSheet.create({
     marginBottom: space.xl,
   },
   heroFill: { height: "100%", borderRadius: 3 },
-  heroStats: {
+
+  // Hero meters (sliding bars)
+  heroBars: { gap: 16 },
+  meterBlock: {},
+  meterTop: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 7,
   },
-  heroStat: { flex: 1, alignItems: "center" },
-  heroStatValue: {
-    fontSize: 22,
-    fontWeight: "800",
+  meterLabel: {
+    fontSize: 13,
+    fontWeight: "600",
     color: colors.onDark,
-    letterSpacing: -0.5,
+    letterSpacing: -0.2,
   },
-  heroStatLabel: {
-    fontSize: 11,
+  meterValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.onDark,
+  },
+  meterTotal: {
     fontWeight: "500",
     color: colors.onDarkMuted,
-    marginTop: 3,
   },
-  heroDivider: {
-    width: StyleSheet.hairlineWidth,
-    height: 28,
-    backgroundColor: "rgba(255,255,255,0.14)",
+  meterLeft: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: colors.onDarkMuted,
+    marginTop: 5,
   },
 
   // Continent section

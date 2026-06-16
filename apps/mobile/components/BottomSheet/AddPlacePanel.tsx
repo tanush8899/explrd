@@ -322,12 +322,12 @@ const styles = StyleSheet.create({
   // ── Search view ────────────────────────────────────────────────────────────
   container: {
     paddingHorizontal: 20,
-    paddingTop: 0,
+    paddingTop: 6,
   },
   subtitle: {
     fontSize: 14,
     color: "#85898f",
-    marginTop: -8,
+    marginTop: 2,
     marginBottom: 14,
   },
   inputRow: {
