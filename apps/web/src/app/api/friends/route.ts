@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthedUser, serverError } from "@/lib/api-auth";
+import { getAuthedUser, isMissingColumn, serverError } from "@/lib/api-auth";
 import type { FriendSummary, FriendRequestSummary } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -52,11 +52,19 @@ export async function GET(req: Request) {
 
     const profiles = new Map<string, ProfileRow>();
     if (otherIds.length > 0) {
-      const { data: profRows, error: profErr } = await supabase
+      let { data: profRows, error: profErr } = await supabase
         .from("profiles")
         .select("user_id, username, display_name, first_name, last_name, avatar_url")
         .in("user_id", otherIds)
         .returns<ProfileRow[]>();
+      // avatar_url column not added yet → retry without it.
+      if (profErr && isMissingColumn(profErr.message, "avatar_url")) {
+        ({ data: profRows, error: profErr } = await supabase
+          .from("profiles")
+          .select("user_id, username, display_name, first_name, last_name")
+          .in("user_id", otherIds)
+          .returns<ProfileRow[]>());
+      }
       if (profErr) {
         return NextResponse.json(
           { error: "profiles_query_failed", details: profErr.message },

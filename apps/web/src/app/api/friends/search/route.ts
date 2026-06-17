@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getAuthedUser, serverError } from "@/lib/api-auth";
+import { getAuthedUser, isMissingColumn, serverError } from "@/lib/api-auth";
 import type { FriendSummary } from "@/lib/types";
 
 export const runtime = "nodejs";
@@ -34,21 +34,32 @@ export async function GET(req: Request) {
     if (q.length < 2) return NextResponse.json({ results: [] });
 
     const pattern = `%${q}%`;
-    const { data, error } = await supabase
-      .from("profiles")
-      .select("user_id, username, display_name, first_name, last_name, avatar_url")
-      .or(
-        [
-          `username.ilike.${pattern}`,
-          `display_name.ilike.${pattern}`,
-          `first_name.ilike.${pattern}`,
-          `last_name.ilike.${pattern}`,
-        ].join(","),
-      )
-      .not("username", "is", null)
-      .neq("user_id", user.id)
-      .limit(10)
-      .returns<ProfileRow[]>();
+    const runSearch = (columns: string) =>
+      supabase
+        .from("profiles")
+        .select(columns)
+        .or(
+          [
+            `username.ilike.${pattern}`,
+            `display_name.ilike.${pattern}`,
+            `first_name.ilike.${pattern}`,
+            `last_name.ilike.${pattern}`,
+          ].join(","),
+        )
+        .not("username", "is", null)
+        .neq("user_id", user.id)
+        .limit(10)
+        .returns<ProfileRow[]>();
+
+    let { data, error } = await runSearch(
+      "user_id, username, display_name, first_name, last_name, avatar_url",
+    );
+    // avatar_url column not added yet → retry without it.
+    if (error && isMissingColumn(error.message, "avatar_url")) {
+      ({ data, error } = await runSearch(
+        "user_id, username, display_name, first_name, last_name",
+      ));
+    }
 
     if (error) {
       return NextResponse.json(
@@ -63,7 +74,7 @@ export async function GET(req: Request) {
       display_name: p.display_name,
       first_name: p.first_name,
       last_name: p.last_name,
-      avatar_url: p.avatar_url,
+      avatar_url: p.avatar_url ?? null,
     }));
 
     return NextResponse.json({ results });

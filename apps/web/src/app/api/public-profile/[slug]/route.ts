@@ -81,12 +81,23 @@ export async function GET(_: Request, context: RouteContext) {
 
     const supabase = createClient(supabaseUrl, serviceKey);
 
-    const { data: profile, error: profileErr } = await supabase
+    let { data: profile, error: profileErr } = await supabase
       .from("profiles")
       .select("user_id, username, first_name, last_name, display_name, avatar_url, public_slug, bio, is_public, created_at, updated_at")
       .eq("public_slug", slug)
       .eq("is_public", true)
       .maybeSingle<UserProfile>();
+
+    // avatar_url column not added yet → retry without it.
+    if (profileErr && profileErr.message.includes("avatar_url")) {
+      ({ data: profile, error: profileErr } = await supabase
+        .from("profiles")
+        .select("user_id, username, first_name, last_name, display_name, public_slug, bio, is_public, created_at, updated_at")
+        .eq("public_slug", slug)
+        .eq("is_public", true)
+        .maybeSingle<UserProfile>());
+    }
+    if (profile) profile.avatar_url = profile.avatar_url ?? null;
 
     if (profileErr) {
       return NextResponse.json(

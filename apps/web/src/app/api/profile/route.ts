@@ -1,12 +1,16 @@
 import { NextResponse } from "next/server";
 import { validateUsername } from "@explrd/shared";
-import { getAuthedUser, serverError } from "@/lib/api-auth";
+import { getAuthedUser, isMissingColumn, serverError } from "@/lib/api-auth";
 import type { UserProfile } from "@/lib/types";
 
 export const runtime = "nodejs";
 
+// With and without avatar_url, so the route still works before the
+// docs/sql/avatars.sql migration adds the column.
 const PROFILE_COLUMNS =
   "user_id, username, first_name, last_name, display_name, avatar_url, public_slug, bio, is_public, created_at, updated_at";
+const PROFILE_COLUMNS_NO_AVATAR =
+  "user_id, username, first_name, last_name, display_name, public_slug, bio, is_public, created_at, updated_at";
 
 type ProfileBody = {
   first_name?: string;
@@ -36,11 +40,22 @@ export async function GET(req: Request) {
     if ("response" in auth) return auth.response;
     const { supabase, user } = auth;
 
-    const { data, error } = await supabase
+    let { data, error } = await supabase
       .from("profiles")
       .select(PROFILE_COLUMNS)
       .eq("user_id", user.id)
       .maybeSingle<UserProfile>();
+
+    // Column not added yet (or stale schema cache) → retry without avatar_url.
+    let avatarColumnExists = true;
+    if (error && isMissingColumn(error.message, "avatar_url")) {
+      avatarColumnExists = false;
+      ({ data, error } = await supabase
+        .from("profiles")
+        .select(PROFILE_COLUMNS_NO_AVATAR)
+        .eq("user_id", user.id)
+        .maybeSingle<UserProfile>());
+    }
 
     if (error) {
       return NextResponse.json(
@@ -50,6 +65,7 @@ export async function GET(req: Request) {
     }
 
     const avatarUrl = metadataAvatarUrl(user.user_metadata);
+    if (data) data.avatar_url = data.avatar_url ?? null;
 
     const profile: UserProfile = data ?? {
       user_id: user.id,
@@ -66,8 +82,9 @@ export async function GET(req: Request) {
     };
 
     // Keep the stored avatar in sync with the latest Google picture so friends
-    // (who read it off the profiles table) always see a current image.
-    if (data && avatarUrl && data.avatar_url !== avatarUrl) {
+    // (who read it off the profiles table) always see a current image. Only when
+    // the column actually exists.
+    if (avatarColumnExists && data && avatarUrl && data.avatar_url !== avatarUrl) {
       await supabase
         .from("profiles")
         .update({ avatar_url: avatarUrl })
@@ -129,25 +146,36 @@ export async function PUT(req: Request) {
 
     const displayName = fullName(firstName, lastName, defaultDisplayName(user.email));
 
-    const { data, error } = await supabase
-      .from("profiles")
-      .upsert(
-        {
-          user_id: user.id,
-          username,
-          first_name: firstName,
-          last_name: lastName || null,
-          display_name: displayName,
-          avatar_url: metadataAvatarUrl(user.user_metadata),
-          // Mirror so existing /u/<slug> public pages keep resolving by handle.
-          public_slug: username,
-          is_public: true,
-          updated_at: new Date().toISOString(),
-        },
-        { onConflict: "user_id" },
-      )
-      .select(PROFILE_COLUMNS)
-      .single<UserProfile>();
+    const baseRow = {
+      user_id: user.id,
+      username,
+      first_name: firstName,
+      last_name: lastName || null,
+      display_name: displayName,
+      // Mirror so existing /u/<slug> public pages keep resolving by handle.
+      public_slug: username,
+      is_public: true,
+      updated_at: new Date().toISOString(),
+    };
+
+    const upsert = (row: Record<string, unknown>, columns: string) =>
+      supabase
+        .from("profiles")
+        .upsert(row, { onConflict: "user_id" })
+        .select(columns)
+        .single<UserProfile>();
+
+    let { data, error } = await upsert(
+      { ...baseRow, avatar_url: metadataAvatarUrl(user.user_metadata) },
+      PROFILE_COLUMNS,
+    );
+
+    // Column not added yet (or stale schema cache) → save without avatar_url so
+    // onboarding/profile edits keep working for everyone.
+    if (error && isMissingColumn(error.message, "avatar_url")) {
+      ({ data, error } = await upsert(baseRow, PROFILE_COLUMNS_NO_AVATAR));
+      if (data) data.avatar_url = null;
+    }
 
     if (error) {
       // Unique-violation race (two requests claimed the same handle at once).

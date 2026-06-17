@@ -51,6 +51,20 @@ export async function getAuthedUser(
   return { supabase, user };
 }
 
+/**
+ * True when a Postgres/PostgREST error is "this column doesn't exist (yet)".
+ * Lets routes that read/write a freshly-added column (e.g. profiles.avatar_url)
+ * fall back to a query without it, so a not-yet-run migration or a stale
+ * PostgREST schema cache can never break existing users.
+ */
+export function isMissingColumn(message: string | undefined, column: string): boolean {
+  if (!message) return false;
+  return (
+    message.includes(column) &&
+    (message.includes("does not exist") || message.includes("schema cache"))
+  );
+}
+
 /** Wrap an unknown thrown value into a 500 JSON response. */
 export function serverError(e: unknown) {
   return NextResponse.json(
