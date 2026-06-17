@@ -10,6 +10,7 @@ import React, {
 } from "react";
 import {
   Dimensions,
+  Image,
   StyleSheet,
   Text,
   TouchableOpacity,
@@ -79,6 +80,8 @@ type Props = {
   children: React.ReactNode;
   title?: string;
   avatarLabel?: string;
+  /** Google profile picture for the signed-in user, when available. */
+  avatarUri?: string | null;
   onAvatarPress?: (anchor: AvatarAnchor) => void;
   footer?: React.ReactNode;
   searchPlaceholder?: string;
@@ -98,6 +101,7 @@ const Sheet = forwardRef<SheetHandle, Props>(function Sheet(
     children,
     title,
     avatarLabel,
+    avatarUri,
     onAvatarPress,
     footer,
     searchPlaceholder = "Search for a place…",
@@ -364,7 +368,11 @@ const Sheet = forwardRef<SheetHandle, Props>(function Sheet(
                             style={styles.avatar}
                             activeOpacity={0.8}
                           >
-                            <Text style={styles.avatarText}>{avatarLabel}</Text>
+                            {avatarUri ? (
+                              <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+                            ) : (
+                              <Text style={styles.avatarText}>{avatarLabel}</Text>
+                            )}
                           </TouchableOpacity>
                         )}
                       </View>
@@ -421,7 +429,11 @@ const Sheet = forwardRef<SheetHandle, Props>(function Sheet(
                       hitSlop={8}
                       activeOpacity={0.8}
                     >
-                      <Text style={styles.pillAvatarText}>{avatarLabel}</Text>
+                      {avatarUri ? (
+                        <Image source={{ uri: avatarUri }} style={styles.pillAvatarImg} />
+                      ) : (
+                        <Text style={styles.pillAvatarText}>{avatarLabel}</Text>
+                      )}
                     </TouchableOpacity>
                   )}
                 </TouchableOpacity>
@@ -539,12 +551,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   pillAvatarText: {
     fontSize: 13,
     fontWeight: "700",
     color: colors.goldInk,
   },
+  pillAvatarImg: { width: "100%", height: "100%" },
   avatar: {
     width: 42,
     height: 42,
@@ -553,12 +567,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    overflow: "hidden",
   },
   avatarText: {
     fontSize: 15,
     fontWeight: "700",
     color: colors.goldInk,
   },
+  avatarImg: { width: "100%", height: "100%" },
   header: {
     flexDirection: "row",
     alignItems: "center",

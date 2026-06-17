@@ -10,6 +10,7 @@ type ProfileRow = {
   display_name: string | null;
   first_name: string | null;
   last_name: string | null;
+  avatar_url: string | null;
 };
 
 /** Escape PostgREST `or`/`ilike` wildcards so a search term can't break the filter. */
@@ -35,7 +36,7 @@ export async function GET(req: Request) {
     const pattern = `%${q}%`;
     const { data, error } = await supabase
       .from("profiles")
-      .select("user_id, username, display_name, first_name, last_name")
+      .select("user_id, username, display_name, first_name, last_name, avatar_url")
       .or(
         [
           `username.ilike.${pattern}`,
@@ -62,6 +63,7 @@ export async function GET(req: Request) {
       display_name: p.display_name,
       first_name: p.first_name,
       last_name: p.last_name,
+      avatar_url: p.avatar_url,
     }));
 
     return NextResponse.json({ results });

@@ -2,6 +2,7 @@ import React from "react";
 import { Text, TouchableOpacity, View, StyleSheet } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { GlassSurface } from "@/components/Glass";
+import { hapticSelection, hapticLight } from "@/lib/haptics";
 import { colors, shadow as sh } from "@/lib/theme";
 
 export type NavTab = "places" | "friends" | "passport";
@@ -26,9 +27,11 @@ type Props = {
   activeTab: NavTab;
   onTabPress: (tab: NavTab) => void;
   onAdd: () => void;
+  /** Count of pending incoming friend requests — shows a badge on Friends. */
+  friendsBadge?: number;
 };
 
-export default function BottomNav({ activeTab, onTabPress, onAdd }: Props) {
+export default function BottomNav({ activeTab, onTabPress, onAdd, friendsBadge = 0 }: Props) {
   return (
     <View style={styles.row}>
       {/* Liquid-glass tab pill — Flighty's floating bottom bar */}
@@ -36,18 +39,29 @@ export default function BottomNav({ activeTab, onTabPress, onAdd }: Props) {
         <View style={styles.tabs}>
           {TABS.map((tab) => {
             const isActive = activeTab === tab.key;
+            const badge = tab.key === "friends" ? friendsBadge : 0;
             return (
               <TouchableOpacity
                 key={tab.key}
-                onPress={() => onTabPress(tab.key)}
+                onPress={() => {
+                  hapticSelection();
+                  onTabPress(tab.key);
+                }}
                 style={styles.tabItem}
                 activeOpacity={0.7}
               >
-                <Ionicons
-                  name={isActive ? tab.iconActive : tab.icon}
-                  size={22}
-                  color={isActive ? BLUE : INACTIVE}
-                />
+                <View>
+                  <Ionicons
+                    name={isActive ? tab.iconActive : tab.icon}
+                    size={22}
+                    color={isActive ? BLUE : INACTIVE}
+                  />
+                  {badge > 0 && (
+                    <View style={styles.badge}>
+                      <Text style={styles.badgeText}>{badge > 9 ? "9+" : badge}</Text>
+                    </View>
+                  )}
+                </View>
                 <Text style={[styles.tabLabel, isActive && styles.tabLabelActive]}>
                   {tab.label}
                 </Text>
@@ -61,7 +75,10 @@ export default function BottomNav({ activeTab, onTabPress, onAdd }: Props) {
       <GlassSurface style={styles.addBtn} interactive>
         <TouchableOpacity
           style={styles.addTouch}
-          onPress={onAdd}
+          onPress={() => {
+            hapticLight();
+            onAdd();
+          }}
           activeOpacity={0.8}
           accessibilityLabel="Add a place"
         >
@@ -106,6 +123,26 @@ const styles = StyleSheet.create({
   },
   tabLabelActive: {
     color: BLUE,
+  },
+  badge: {
+    position: "absolute",
+    top: -5,
+    right: -9,
+    minWidth: 16,
+    height: 16,
+    borderRadius: 8,
+    paddingHorizontal: 4,
+    backgroundColor: colors.danger,
+    alignItems: "center",
+    justifyContent: "center",
+    borderWidth: 1.5,
+    borderColor: "#ffffff",
+  },
+  badgeText: {
+    color: "#ffffff",
+    fontSize: 9,
+    fontWeight: "800",
+    lineHeight: 12,
   },
   addBtn: {
     width: 56,

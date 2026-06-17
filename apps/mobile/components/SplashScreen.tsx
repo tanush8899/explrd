@@ -79,7 +79,7 @@ export default function SplashScreen({ opacity }: Props) {
             { opacity: wordmarkOp, transform: [{ translateY: wordmarkY }] },
           ]}
         >
-          explr
+          explrd
         </Animated.Text>
 
         <Animated.Text style={[styles.tagline, { opacity: taglineOp }]}>

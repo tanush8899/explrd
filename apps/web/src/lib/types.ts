@@ -47,6 +47,7 @@ export type UserProfile = {
   first_name: string | null;
   last_name: string | null;
   display_name: string | null;
+  avatar_url: string | null;
   public_slug: string | null;
   bio: string | null;
   is_public: boolean;
@@ -60,6 +61,7 @@ export type FriendSummary = {
   display_name: string | null;
   first_name: string | null;
   last_name: string | null;
+  avatar_url: string | null;
 };
 
 export type FriendRequestSummary = FriendSummary & {

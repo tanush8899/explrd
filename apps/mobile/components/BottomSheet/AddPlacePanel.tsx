@@ -12,6 +12,7 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
+import { hapticSelection, hapticSuccess, hapticError } from "@/lib/haptics";
 import { searchPlaces, savePin, type GeoResult } from "@/lib/api";
 import type { SavedPlace } from "@explrd/shared";
 import { colors } from "@/lib/theme";
@@ -89,6 +90,7 @@ export default function AddPlacePanel({
 
   const handleSelectResult = (item: GeoResult) => {
     Keyboard.dismiss();
+    hapticSelection();
     setSelected(item);
     onSelectPlace(item);
   };
@@ -111,6 +113,7 @@ export default function AddPlacePanel({
         lng: selected.lng,
         address: selected.address,
       });
+      hapticSuccess();
       onSaved({
         place_id: selected.place_id,
         name: selected.display_name,
@@ -138,6 +141,7 @@ export default function AddPlacePanel({
       setResults([]);
       setTimeout(() => inputRef.current?.focus(), 250);
     } catch (e: unknown) {
+      hapticError();
       setError((e as Error)?.message ?? "Failed to save. Try again.");
     } finally {
       setSaving(false);

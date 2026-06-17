@@ -2,6 +2,7 @@ import React, { useCallback, useContext, useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Image,
   ScrollView,
   StyleSheet,
   Text,
@@ -17,6 +18,8 @@ import { useSession } from "@/lib/SessionContext";
 import { useProfile } from "@/lib/ProfileContext";
 import { checkUsernameAvailable, deleteAccount, updateProfile } from "@/lib/api";
 import { signOut } from "@/lib/auth";
+import { selfAvatarUrl } from "@/lib/avatar";
+import { hapticSuccess, hapticError, hapticWarning } from "@/lib/haptics";
 import { colors, gradients, radius, space, type as t, shadow } from "@/lib/theme";
 
 type AvailState =
@@ -36,9 +39,11 @@ type Props = {
  * so there's no visibility toggle — just a shareable handle.
  */
 export default function ProfilePanel({ displayName: fallbackName, avatarLabel }: Props) {
-  const { session } = useSession();
+  const { session, user } = useSession();
   const { profile, setProfile } = useProfile();
   const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
+
+  const avatarUri = selfAvatarUrl(user, profile);
 
   const [firstName, setFirstName] = useState(profile?.first_name ?? "");
   const [lastName, setLastName] = useState(profile?.last_name ?? "");
@@ -110,8 +115,10 @@ export default function ProfilePanel({ displayName: fallbackName, avatarLabel }:
       });
       setProfile(updated);
       setSaved(true);
+      hapticSuccess();
       setTimeout(() => setSaved(false), 2000);
     } catch (e) {
+      hapticError();
       setError(e instanceof Error ? e.message : "Could not save profile.");
     } finally {
       setSaving(false);
@@ -131,6 +138,7 @@ export default function ProfilePanel({ displayName: fallbackName, avatarLabel }:
           style: "destructive",
           onPress: async () => {
             if (!session?.access_token) return;
+            hapticWarning();
             setDeleting(true);
             try {
               await deleteAccount(session.access_token);
@@ -170,7 +178,11 @@ export default function ProfilePanel({ displayName: fallbackName, avatarLabel }:
         style={styles.hero}
       >
         <View style={styles.heroAvatar}>
-          <Text style={styles.heroAvatarText}>{heroInitials}</Text>
+          {avatarUri ? (
+            <Image source={{ uri: avatarUri }} style={styles.heroAvatarImg} />
+          ) : (
+            <Text style={styles.heroAvatarText}>{heroInitials}</Text>
+          )}
         </View>
         <Text style={styles.heroName} numberOfLines={1}>
           {heroName}
@@ -305,8 +317,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginBottom: space.md,
+    overflow: "hidden",
   },
   heroAvatarText: { fontSize: 26, fontWeight: "800", color: colors.goldInk },
+  heroAvatarImg: { width: "100%", height: "100%", borderRadius: 36 },
   heroName: {
     fontSize: 22,
     fontWeight: "800",

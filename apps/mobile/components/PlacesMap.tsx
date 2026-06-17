@@ -3,6 +3,7 @@ import { StyleSheet, View } from "react-native";
 import MapView, { Marker, type Camera, type Region } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassCircleButton, Icon } from "@/components/Glass";
+import { hapticLight } from "@/lib/haptics";
 import type { SavedPlace } from "@explrd/shared";
 
 export type PreviewCoord = { lat: number; lng: number; place_id: string; addresstype?: string | null };
@@ -18,6 +19,9 @@ type Props = {
   places: SavedPlace[];
   previewCoord?: PreviewCoord | null;
   friendOverlay?: FriendOverlay | null;
+  /** Pixels the bottom sheet currently occupies — keeps the Apple logo / legal
+   *  attribution clear of the sheet by pushing the map's layout margins up. */
+  bottomInset?: number;
 };
 
 // Same city+country in both lists counts as a shared place
@@ -47,7 +51,7 @@ const FIT_PADDING = { top: 80, right: 48, bottom: 360, left: 48 };
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export default function PlacesMap({ places, previewCoord, friendOverlay }: Props) {
+export default function PlacesMap({ places, previewCoord, friendOverlay, bottomInset = 0 }: Props) {
   const mapRef = useRef<MapView>(null);
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<MapMode>("globe");
@@ -119,6 +123,7 @@ export default function PlacesMap({ places, previewCoord, friendOverlay }: Props
   }, [previewCoord]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handleToggle = useCallback(() => {
+    hapticLight();
     const next: MapMode = isGlobe ? "standard" : "globe";
     setMode(next);
 
@@ -146,6 +151,7 @@ export default function PlacesMap({ places, previewCoord, friendOverlay }: Props
         initialCamera={GLOBE_CAMERA}
         showsUserLocation={false}
         showsMyLocationButton={false}
+        mapPadding={{ top: 0, right: 0, bottom: bottomInset, left: 0 }}
       >
         {myMarkers.map((place) => (
           <Marker

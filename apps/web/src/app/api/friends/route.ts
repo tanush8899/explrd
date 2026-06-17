@@ -18,6 +18,7 @@ type ProfileRow = {
   display_name: string | null;
   first_name: string | null;
   last_name: string | null;
+  avatar_url: string | null;
 };
 
 /**
@@ -53,7 +54,7 @@ export async function GET(req: Request) {
     if (otherIds.length > 0) {
       const { data: profRows, error: profErr } = await supabase
         .from("profiles")
-        .select("user_id, username, display_name, first_name, last_name")
+        .select("user_id, username, display_name, first_name, last_name, avatar_url")
         .in("user_id", otherIds)
         .returns<ProfileRow[]>();
       if (profErr) {
@@ -73,6 +74,7 @@ export async function GET(req: Request) {
         display_name: p?.display_name ?? null,
         first_name: p?.first_name ?? null,
         last_name: p?.last_name ?? null,
+        avatar_url: p?.avatar_url ?? null,
       };
     };
     const reqSummary = (r: RequestRow): FriendRequestSummary => ({

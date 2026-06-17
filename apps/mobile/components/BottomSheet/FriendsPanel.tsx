@@ -19,37 +19,23 @@ import type {
   FriendRequestSummary,
 } from "@explrd/shared";
 import { SheetScrollContext } from "@/components/Sheet";
+import Avatar, { initialsOf } from "@/components/Avatar";
 import { useSession } from "@/lib/SessionContext";
 import { useFriends, type FriendMapFilter } from "@/lib/FriendsContext";
 import { searchUsers } from "@/lib/api";
+import {
+  hapticSelection,
+  hapticSuccess,
+  hapticError,
+  hapticWarning,
+} from "@/lib/haptics";
 import { colors } from "@/lib/theme";
 import { gradients } from "@/lib/theme";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
-const AVATAR_GRADIENTS: [string, string][] = [
-  ["#f59e0b", "#ef4444"],
-  ["#3b82f6", "#8b5cf6"],
-  ["#10b981", "#06b6d4"],
-  ["#ec4899", "#8b5cf6"],
-  ["#6366f1", "#3b82f6"],
-  ["#f97316", "#eab308"],
-];
-
-function gradientFor(key: string): [string, string] {
-  let h = 0;
-  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
-  return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length];
-}
-
 function nameOf(f: FriendSummary): string {
   return f.display_name ?? f.username ?? "Explorer";
-}
-
-function initialsOf(name: string): string {
-  const parts = name.trim().split(/\s+/);
-  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
-  return name.slice(0, 2).toUpperCase();
 }
 
 function firstName(name: string): string {
@@ -169,6 +155,7 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
     setAddNote(null);
     try {
       const status = await sendRequest(target.username);
+      hapticSuccess();
       setAddNote(
         status === "accepted"
           ? `You're now friends with ${firstName(nameOf(target))}! 🎉`
@@ -177,6 +164,7 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
       setSearchQuery("");
       setSearchResults([]);
     } catch (e) {
+      hapticError();
       setAddError(e instanceof Error ? e.message : "Couldn't send request.");
     } finally {
       setAddBusyId(null);
@@ -187,6 +175,7 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
     setBusyReq(req.request_id);
     try {
       await acceptRequest(req.request_id);
+      hapticSuccess();
     } catch (e) {
       Alert.alert("Couldn't accept", e instanceof Error ? e.message : "Try again.");
     } finally {
@@ -211,7 +200,10 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
       {
         text: "Remove",
         style: "destructive",
-        onPress: () => void removeFriend(friend.user_id),
+        onPress: () => {
+          hapticWarning();
+          void removeFriend(friend.user_id);
+        },
       },
     ]);
   };
@@ -271,14 +263,13 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
               const busy = addBusyId === u.user_id;
               return (
                 <View key={u.user_id} style={styles.resultRow}>
-                  <LinearGradient
-                    colors={gradientFor(u.user_id)}
-                    start={{ x: 0, y: 0 }}
-                    end={{ x: 1, y: 1 }}
-                    style={styles.resultAvatar}
-                  >
-                    <Text style={styles.resultAvatarText}>{initialsOf(nameOf(u))}</Text>
-                  </LinearGradient>
+                  <Avatar
+                    uri={u.avatar_url}
+                    name={nameOf(u)}
+                    idKey={u.user_id}
+                    size={40}
+                    textStyle={styles.resultAvatarText}
+                  />
                   <View style={styles.resultMid}>
                     <Text style={styles.resultName} numberOfLines={1}>
                       {nameOf(u)}
@@ -331,14 +322,13 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
           </Text>
           {incoming.map((req) => (
             <View key={req.request_id} style={styles.requestRow}>
-              <LinearGradient
-                colors={gradientFor(req.user_id)}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 1 }}
-                style={styles.requestAvatar}
-              >
-                <Text style={styles.requestAvatarText}>{initialsOf(nameOf(req))}</Text>
-              </LinearGradient>
+              <Avatar
+                uri={req.avatar_url}
+                name={nameOf(req)}
+                idKey={req.user_id}
+                size={44}
+                textStyle={styles.requestAvatarText}
+              />
               <View style={styles.requestMid}>
                 <Text style={styles.requestName} numberOfLines={1}>
                   {nameOf(req)}
@@ -392,22 +382,26 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
                   key={friend.user_id}
                   style={styles.railItem}
                   activeOpacity={0.8}
-                  onPress={() => selectFriend(isSelected ? null : friend)}
+                  onPress={() => {
+                    hapticSelection();
+                    selectFriend(isSelected ? null : friend);
+                  }}
                   onLongPress={() => confirmRemove(friend)}
                 >
                   <View style={[styles.avatarRing, isSelected && styles.avatarRingActive]}>
-                    <LinearGradient
-                      colors={gradientFor(friend.user_id)}
-                      start={{ x: 0, y: 0 }}
-                      end={{ x: 1, y: 1 }}
-                      style={styles.avatar}
-                    >
-                      {isLoading ? (
+                    {isLoading ? (
+                      <View style={[styles.avatar, styles.avatarLoading]}>
                         <ActivityIndicator color="#ffffff" size="small" />
-                      ) : (
-                        <Text style={styles.avatarText}>{initialsOf(nameOf(friend))}</Text>
-                      )}
-                    </LinearGradient>
+                      </View>
+                    ) : (
+                      <Avatar
+                        uri={friend.avatar_url}
+                        name={nameOf(friend)}
+                        idKey={friend.user_id}
+                        size={54}
+                        textStyle={styles.avatarText}
+                      />
+                    )}
                   </View>
                   <Text
                     style={[styles.railName, isSelected && styles.railNameActive]}
@@ -903,6 +897,7 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  avatarLoading: { backgroundColor: "#9aa0a6" },
   avatarText: { fontSize: 18, fontWeight: "700", color: "#ffffff" },
   pendingAvatar: {
     width: 54,

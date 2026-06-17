@@ -47,6 +47,8 @@ export type UserProfile = {
   first_name: string | null;
   last_name: string | null;
   display_name: string | null;
+  /** Google (OAuth) profile picture URL, when available. */
+  avatar_url: string | null;
   public_slug: string | null;
   bio: string | null;
   is_public: boolean;
@@ -73,6 +75,8 @@ export type FriendSummary = {
   display_name: string | null;
   first_name: string | null;
   last_name: string | null;
+  /** Google (OAuth) profile picture URL, when available. */
+  avatar_url: string | null;
 };
 
 /** A pending request, with the request row id so it can be accepted/rejected. */

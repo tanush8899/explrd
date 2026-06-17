@@ -2,6 +2,7 @@ import React, { useEffect, useRef } from "react";
 import {
   Animated,
   Dimensions,
+  Image,
   Modal,
   StyleSheet,
   Text,
@@ -11,6 +12,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { hapticSelection } from "@/lib/haptics";
 import { colors, radius, shadow as sh } from "@/lib/theme";
 
 const { width: SCREEN_W, height: SCREEN_H } = Dimensions.get("window");
@@ -22,6 +24,10 @@ type Props = {
   anchor: AvatarAnchor | null;
   displayName: string;
   avatarLabel: string;
+  /** Google profile picture, when available. */
+  avatarUri?: string | null;
+  /** @username shown under the name (replaces the old "Explorer" subtitle). */
+  handle?: string | null;
   onClose: () => void;
   onViewProfile: () => void;
   onSignOut: () => void;
@@ -39,6 +45,8 @@ export default function AvatarMenu({
   anchor,
   displayName,
   avatarLabel,
+  avatarUri,
+  handle,
   onClose,
   onViewProfile,
   onSignOut,
@@ -84,15 +92,21 @@ export default function AvatarMenu({
         {/* Identity header */}
         <View style={styles.identity}>
           <View style={styles.avatar}>
-            <Text style={styles.avatarText}>{avatarLabel}</Text>
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.avatarImg} />
+            ) : (
+              <Text style={styles.avatarText}>{avatarLabel}</Text>
+            )}
           </View>
           <View style={{ flex: 1 }}>
             <Text style={styles.name} numberOfLines={1}>
               {displayName}
             </Text>
-            <Text style={styles.sub} numberOfLines={1}>
-              Explorer
-            </Text>
+            {handle ? (
+              <Text style={styles.sub} numberOfLines={1}>
+                @{handle}
+              </Text>
+            ) : null}
           </View>
         </View>
 
@@ -132,7 +146,14 @@ function MenuItem({
   onPress: () => void;
 }) {
   return (
-    <TouchableOpacity style={styles.item} onPress={onPress} activeOpacity={0.6}>
+    <TouchableOpacity
+      style={styles.item}
+      onPress={() => {
+        hapticSelection();
+        onPress();
+      }}
+      activeOpacity={0.6}
+    >
       <Ionicons name={icon} size={20} color={danger ? colors.danger : colors.ink} />
       <Text style={[styles.itemLabel, danger && { color: colors.danger }]}>{label}</Text>
     </TouchableOpacity>
@@ -165,8 +186,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gold,
     alignItems: "center",
     justifyContent: "center",
+    overflow: "hidden",
   },
   avatarText: { fontSize: 14, fontWeight: "700", color: colors.goldInk },
+  avatarImg: { width: "100%", height: "100%" },
   name: { fontSize: 16, fontWeight: "700", color: colors.ink, letterSpacing: -0.3 },
   sub: { fontSize: 12, color: colors.muted, marginTop: 1 },
   divider: {

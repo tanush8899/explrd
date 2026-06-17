@@ -6,7 +6,7 @@ import type { UserProfile } from "@/lib/types";
 export const runtime = "nodejs";
 
 const PROFILE_COLUMNS =
-  "user_id, username, first_name, last_name, display_name, public_slug, bio, is_public, created_at, updated_at";
+  "user_id, username, first_name, last_name, display_name, avatar_url, public_slug, bio, is_public, created_at, updated_at";
 
 type ProfileBody = {
   first_name?: string;
@@ -17,6 +17,12 @@ type ProfileBody = {
 function defaultDisplayName(email: string | null | undefined) {
   if (!email) return "Explr Traveler";
   return email.split("@")[0] || "Explr Traveler";
+}
+
+/** The Google/OAuth avatar that Supabase stores on the auth user, if any. */
+function metadataAvatarUrl(meta: Record<string, unknown> | undefined): string | null {
+  const url = meta?.avatar_url ?? meta?.picture;
+  return typeof url === "string" && url.length > 0 ? url : null;
 }
 
 function fullName(first: string, last: string, fallback: string) {
@@ -43,18 +49,31 @@ export async function GET(req: Request) {
       );
     }
 
+    const avatarUrl = metadataAvatarUrl(user.user_metadata);
+
     const profile: UserProfile = data ?? {
       user_id: user.id,
       username: null,
       first_name: null,
       last_name: null,
       display_name: defaultDisplayName(user.email),
+      avatar_url: avatarUrl,
       public_slug: null,
       bio: null,
       is_public: true,
       created_at: null,
       updated_at: null,
     };
+
+    // Keep the stored avatar in sync with the latest Google picture so friends
+    // (who read it off the profiles table) always see a current image.
+    if (data && avatarUrl && data.avatar_url !== avatarUrl) {
+      await supabase
+        .from("profiles")
+        .update({ avatar_url: avatarUrl })
+        .eq("user_id", user.id);
+      profile.avatar_url = avatarUrl;
+    }
 
     return NextResponse.json({ profile });
   } catch (e) {
@@ -119,6 +138,7 @@ export async function PUT(req: Request) {
           first_name: firstName,
           last_name: lastName || null,
           display_name: displayName,
+          avatar_url: metadataAvatarUrl(user.user_metadata),
           // Mirror so existing /u/<slug> public pages keep resolving by handle.
           public_slug: username,
           is_public: true,

@@ -1,9 +1,12 @@
 import React, { useCallback, useMemo, useRef, useState } from "react";
-import { View, Keyboard, Alert, StyleSheet } from "react-native";
+import { View, Keyboard, Alert, Dimensions, StyleSheet } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Sheet, { type SheetHandle, type AvatarAnchor } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
 import { useProfile } from "@/lib/ProfileContext";
 import { usePlaces } from "@/lib/PlacesContext";
+import { selfAvatarUrl } from "@/lib/avatar";
+import { hapticSelection } from "@/lib/haptics";
 
 import AddPlacePanel from "@/components/BottomSheet/AddPlacePanel";
 import MyPlacesPanel from "@/components/BottomSheet/MyPlacesPanel";
@@ -31,13 +34,20 @@ const TAB_TITLES: Record<ActiveTab, string> = {
   profile: "Profile",
 };
 
+// Sheet resting heights, mirrored from Sheet.tsx so the map can lift the Apple
+// logo to sit just above whichever stop the sheet is parked at.
+const SCREEN_H = Dimensions.get("window").height;
+const SHEET_MID = Math.round(SCREEN_H * 0.52);
+const SHEET_FULL = Math.round(SCREEN_H * 0.9);
+
 // ─── Screen ───────────────────────────────────────────────────────────────────
 
 export default function MainScreen() {
   const { user } = useSession();
   const { profile } = useProfile();
   const { places, setPlaces, refresh, deletePlace } = usePlaces();
-  const { selectedData: friendData, mapFilter } = useFriends();
+  const { selectedData: friendData, mapFilter, incoming } = useFriends();
+  const insets = useSafeAreaInsets();
   const sheetRef = useRef<SheetHandle>(null);
 
   const [activeTab, setActiveTab]       = useState<ActiveTab>("places");
@@ -46,6 +56,15 @@ export default function MainScreen() {
   const [stampPlace, setStampPlace]     = useState<SavedPlace | null>(null);
   const [menuOpen, setMenuOpen]         = useState(false);
   const [menuAnchor, setMenuAnchor]     = useState<AvatarAnchor | null>(null);
+  const [sheetSnap, setSheetSnap]       = useState<0 | 1 | 2>(1);
+
+  const avatarUri = useMemo(() => selfAvatarUrl(user, profile), [user, profile]);
+
+  // Keep the Apple logo above the sheet at whichever stop it's resting on.
+  const mapBottomInset = useMemo(() => {
+    const pill = 64 + Math.max(0, insets.bottom - 12);
+    return [pill, SHEET_MID, SHEET_FULL][sheetSnap] + 16;
+  }, [sheetSnap, insets.bottom]);
 
   // Tab to return to when the profile panel is closed.
   const tabBeforeProfile = useRef<ActiveTab>("places");
@@ -76,6 +95,7 @@ export default function MainScreen() {
 
   // ── Avatar menu / profile ─────────────────────────────────────────────────────
   const handleAvatarPress = useCallback((anchor: AvatarAnchor) => {
+    hapticSelection();
     setMenuAnchor(anchor);
     setMenuOpen(true);
   }, []);
@@ -126,6 +146,7 @@ export default function MainScreen() {
   // to pill while in the add/search flow, exit the flow entirely.
   // Guard: skip during programmatic save-snap so the map/polygon stays visible.
   const handleSnap = useCallback((i: 0 | 1 | 2) => {
+    setSheetSnap(i);
     if (activeTabRef.current === "add" && i === 0) {
       Keyboard.dismiss();
       setPreviewCoord(null);
@@ -208,13 +229,19 @@ export default function MainScreen() {
 
   return (
     <View style={StyleSheet.absoluteFill}>
-      <PlacesMap places={places} previewCoord={previewCoord} friendOverlay={friendOverlay} />
+      <PlacesMap
+        places={places}
+        previewCoord={previewCoord}
+        friendOverlay={friendOverlay}
+        bottomInset={mapBottomInset}
+      />
 
       <Sheet
         ref={sheetRef}
         initialIndex={1}
         title={TAB_TITLES[activeTab]}
         avatarLabel={avatarLabel}
+        avatarUri={avatarUri}
         onAvatarPress={handleAvatarPress}
         searchPlaceholder="Search a city…"
         onSearchPillPress={handleSearchPillPress}
@@ -228,6 +255,7 @@ export default function MainScreen() {
               activeTab={navActiveTab}
               onTabPress={handleNavTabPress}
               onAdd={handleAddPress}
+              friendsBadge={incoming.length}
             />
           ) : undefined
         }
@@ -275,6 +303,8 @@ export default function MainScreen() {
         anchor={menuAnchor}
         displayName={displayName}
         avatarLabel={avatarLabel}
+        avatarUri={avatarUri}
+        handle={profile?.username ?? null}
         onClose={() => setMenuOpen(false)}
         onViewProfile={handleViewProfile}
         onSignOut={handleSignOut}
