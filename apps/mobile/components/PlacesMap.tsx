@@ -24,9 +24,8 @@ type Props = {
   bottomInset?: number;
 };
 
-// Push the bottom-left Apple logo right of the sheet's 44px rounded corner so it
-// sits over the flat top edge instead of floating above the curve.
-const LOGO_LEFT_INSET = 54;
+// Keep the bottom-left Apple logo near the screen's left edge.
+const LOGO_LEFT_INSET = 14;
 
 // Same city+country in both lists counts as a shared place
 function overlayKey(p: SavedPlace): string {
