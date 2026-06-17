@@ -24,6 +24,10 @@ type Props = {
   bottomInset?: number;
 };
 
+// Push the bottom-left Apple logo right of the sheet's 44px rounded corner so it
+// sits over the flat top edge instead of floating above the curve.
+const LOGO_LEFT_INSET = 54;
+
 // Same city+country in both lists counts as a shared place
 function overlayKey(p: SavedPlace): string {
   const city = (p.normalized_city ?? p.city ?? p.name ?? "").toLowerCase().trim();
@@ -151,7 +155,7 @@ export default function PlacesMap({ places, previewCoord, friendOverlay, bottomI
         initialCamera={GLOBE_CAMERA}
         showsUserLocation={false}
         showsMyLocationButton={false}
-        mapPadding={{ top: 0, right: 0, bottom: bottomInset, left: 0 }}
+        mapPadding={{ top: 0, right: 0, bottom: bottomInset, left: LOGO_LEFT_INSET }}
       >
         {myMarkers.map((place) => (
           <Marker

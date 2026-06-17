@@ -13,6 +13,7 @@ import { Ionicons } from "@expo/vector-icons";
 import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
 import { hapticSelection, hapticSuccess, hapticError } from "@/lib/haptics";
+import { STAMP_TOTAL_MS } from "@/components/PassportStamp";
 import { searchPlaces, savePin, type GeoResult } from "@/lib/api";
 import type { SavedPlace } from "@explrd/shared";
 import { colors } from "@/lib/theme";
@@ -134,12 +135,13 @@ export default function AddPlacePanel({
         continent_boundary: null,
       } satisfies SavedPlace);
       // Hand control to the parent — it plays the stamp and keeps us in the add
-      // flow so the next city can be added immediately. Reset to a clean search
-      // and refocus so the user can just keep typing.
+      // flow so the next city can be added immediately. Reset to a clean search,
+      // then refocus once the stamp has finished so the keyboard rises on a clean
+      // screen (not behind the celebration overlay).
       setSelected(null);
       setQuery("");
       setResults([]);
-      setTimeout(() => inputRef.current?.focus(), 250);
+      setTimeout(() => inputRef.current?.focus(), STAMP_TOTAL_MS + 80);
     } catch (e: unknown) {
       hapticError();
       setError((e as Error)?.message ?? "Failed to save. Try again.");

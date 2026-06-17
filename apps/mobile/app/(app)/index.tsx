@@ -60,10 +60,14 @@ export default function MainScreen() {
 
   const avatarUri = useMemo(() => selfAvatarUrl(user, profile), [user, profile]);
 
-  // Keep the Apple logo above the sheet at whichever stop it's resting on.
+  // Keep the Apple logo just above the sheet's top edge at whichever stop it's
+  // resting on. The sheet sits BOTTOM_GAP (12px) off the bottom in pill/mid and
+  // flush in full; add a small gap so the logo clears the edge without floating.
   const mapBottomInset = useMemo(() => {
-    const pill = 64 + Math.max(0, insets.bottom - 12);
-    return [pill, SHEET_MID, SHEET_FULL][sheetSnap] + 16;
+    const pillHeight = 64 + Math.max(0, insets.bottom - 12);
+    const heights = [pillHeight, SHEET_MID, SHEET_FULL];
+    const cardBottom = [12, 12, 0];
+    return heights[sheetSnap] + cardBottom[sheetSnap] + 4;
   }, [sheetSnap, insets.bottom]);
 
   // Tab to return to when the profile panel is closed.

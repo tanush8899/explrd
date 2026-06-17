@@ -9,9 +9,10 @@ type Props = {
   onDismiss: () => void;
 };
 
-const HOLD_MS   = 750;
-const FADE_MS   = 280;
-const TOTAL_MS  = HOLD_MS + FADE_MS;
+const HOLD_MS   = 1150;
+const FADE_MS   = 340;
+/** Total time the stamp is on screen — used by the add flow to time the refocus. */
+export const STAMP_TOTAL_MS = HOLD_MS + FADE_MS;
 
 export default function PassportStamp({ place, onDismiss }: Props) {
   // ── Animated values ──────────────────────────────────────────────────────────
