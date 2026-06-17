@@ -68,8 +68,8 @@ export default function MainScreen() {
     const heights = [pillHeight, SHEET_MID, SHEET_FULL];
     const cardBottom = [12, 12, 0];
     // iOS floats the attribution ~25px above the layout margin, so sit the
-    // margin a touch *below* the sheet's top edge — the logo lands just above it.
-    return heights[sheetSnap] + cardBottom[sheetSnap] - 12;
+    // margin well below the sheet's top edge — the logo lands just above it.
+    return heights[sheetSnap] + cardBottom[sheetSnap] - 24;
   }, [sheetSnap, insets.bottom]);
 
   // Tab to return to when the profile panel is closed.
