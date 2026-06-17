@@ -2,14 +2,15 @@ import React, { useEffect, useRef } from "react";
 import { Animated, StyleSheet, Text, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import type { SavedPlace } from "@explrd/shared";
+import { gradients } from "@/lib/theme";
 
 type Props = {
   place: SavedPlace;
   onDismiss: () => void;
 };
 
-const HOLD_MS   = 2000;
-const FADE_MS   = 480;
+const HOLD_MS   = 1500;
+const FADE_MS   = 420;
 const TOTAL_MS  = HOLD_MS + FADE_MS;
 
 export default function PassportStamp({ place, onDismiss }: Props) {
@@ -110,7 +111,7 @@ export default function PassportStamp({ place, onDismiss }: Props) {
         ]}
       >
         <LinearGradient
-          colors={["#2a1a58", "#111827", "#0a0f1a"]}
+          colors={gradients.passport}
           start={{ x: 0.15, y: 0 }}
           end={{ x: 0.85, y: 1 }}
           style={styles.gradient}

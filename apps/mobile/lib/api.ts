@@ -1,4 +1,10 @@
-import type { SavedPlace, ExplrdStats, UserProfile } from "@explrd/shared";
+import type {
+  SavedPlace,
+  ExplrdStats,
+  UserProfile,
+  FriendsPayload,
+  FriendSummary,
+} from "@explrd/shared";
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
@@ -158,12 +164,17 @@ export async function appleMapsGeocode(q: string, signal?: AbortSignal): Promise
 
   for (const place of data.results ?? []) {
     const addr = place.structuredAddress;
-    const city = addr?.locality || place.name;
+    // Cities only: require a real locality. This drops country/state/region
+    // results (e.g. searching "Japan" or "Kerala") while still resolving
+    // landmarks like "Big Ben" up to their parent city ("London").
+    const city = addr?.locality;
     const state = addr?.administrativeArea;
     const country = place.country;       // top-level field
     const countryCode = place.countryCode; // top-level field
 
     if (!city || !country) continue;
+    // Guard against a country/state echoed back as its own locality.
+    if (city.toLowerCase() === country.toLowerCase()) continue;
 
     const key = `${city.toLowerCase()}|${country.toLowerCase()}`;
     if (seen.has(key)) continue;
@@ -178,6 +189,7 @@ export async function appleMapsGeocode(q: string, signal?: AbortSignal): Promise
       type: "city",
       class: "place",
       addresstype: "city",
+      landmark_name: null,
     });
   }
   return out;
@@ -255,6 +267,7 @@ export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise
       type: isStrictCity ? (r.type ?? null) : "city",
       class: isStrictCity ? (r.class ?? null) : "place",
       addresstype: isStrictCity ? (r.addresstype ?? null) : "city",
+      landmark_name: null,
     });
   }
   return out;
@@ -397,10 +410,9 @@ export async function fetchPlaceBoundary(
 // ─── Profile ─────────────────────────────────────────────────────────────────
 
 export type ProfileBody = {
-  display_name?: string;
-  public_slug?: string;
-  bio?: string;
-  is_public?: boolean;
+  first_name?: string;
+  last_name?: string;
+  username?: string;
 };
 
 /** GET /api/profile */
@@ -431,6 +443,20 @@ export async function updateProfile(
   return data.profile;
 }
 
+/** GET /api/username-available?u= — { available, reason? } */
+export async function checkUsernameAvailable(
+  accessToken: string,
+  username: string,
+  signal?: AbortSignal,
+): Promise<{ available: boolean; reason?: string }> {
+  const res = await fetch(
+    `${API_BASE}/api/username-available?u=${encodeURIComponent(username)}`,
+    { headers: authHeaders(accessToken), signal },
+  );
+  if (!res.ok) throw new Error(`checkUsernameAvailable: ${res.status}`);
+  return res.json();
+}
+
 // ─── Friends ─────────────────────────────────────────────────────────────────
 
 export type FriendProfilePayload = {
@@ -453,6 +479,94 @@ export async function fetchPublicProfile(
   }
   if (!res.ok) throw new Error(`fetchPublicProfile: ${res.status}`);
   return res.json();
+}
+
+/** GET /api/friends — friends + incoming/outgoing requests for the caller. */
+export async function fetchFriends(accessToken: string): Promise<FriendsPayload> {
+  const res = await fetch(`${API_BASE}/api/friends`, {
+    headers: authHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(`fetchFriends: ${res.status}`);
+  return res.json();
+}
+
+/** POST /api/friends/request — send (or auto-accept reverse) by @username. */
+export async function sendFriendRequest(
+  accessToken: string,
+  username: string,
+): Promise<{ status: "pending" | "accepted" }> {
+  const res = await fetch(`${API_BASE}/api/friends/request`, {
+    method: "POST",
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ username }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.details ?? err.error ?? `sendFriendRequest: ${res.status}`);
+  }
+  return res.json();
+}
+
+/** POST /api/friends/respond — accept or reject an incoming request. */
+export async function respondToFriendRequest(
+  accessToken: string,
+  requestId: string,
+  action: "accept" | "reject",
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/friends/respond`, {
+    method: "POST",
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ requestId, action }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.details ?? err.error ?? `respondToFriendRequest: ${res.status}`);
+  }
+}
+
+/** DELETE /api/friends — un-friend or withdraw an outgoing request. */
+export async function removeFriend(
+  accessToken: string,
+  userId: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/friends`, {
+    method: "DELETE",
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ userId }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.details ?? err.error ?? `removeFriend: ${res.status}`);
+  }
+}
+
+/** GET /api/friends/search?q= — find people by name or @username. */
+export async function searchUsers(
+  accessToken: string,
+  q: string,
+  signal?: AbortSignal,
+): Promise<FriendSummary[]> {
+  const res = await fetch(
+    `${API_BASE}/api/friends/search?q=${encodeURIComponent(q)}`,
+    { headers: authHeaders(accessToken), signal },
+  );
+  if (!res.ok) throw new Error(`searchUsers: ${res.status}`);
+  const data = (await res.json()) as { results?: FriendSummary[] };
+  return data.results ?? [];
+}
+
+// ─── Account ─────────────────────────────────────────────────────────────────
+
+/** DELETE /api/account — permanently delete the signed-in user and all their data. */
+export async function deleteAccount(accessToken: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/account`, {
+    method: "DELETE",
+    headers: authHeaders(accessToken),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.details ?? err.error ?? `deleteAccount: ${res.status}`);
+  }
 }
 
 // ─── Share ───────────────────────────────────────────────────────────────────

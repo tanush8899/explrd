@@ -3,6 +3,7 @@ import { View, Text, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import ViewShot, { type ViewShotRef } from "react-native-view-shot";
 import type { ExplrdStats } from "@explrd/shared";
+import { gradients } from "@/lib/theme";
 
 export type PassportCardProps = {
   displayName: string;
@@ -12,7 +13,8 @@ export type PassportCardProps = {
 // forwardRef so SharePanel can call .capture() on the ViewShot inside
 const PassportCard = forwardRef<ViewShotRef, PassportCardProps>(
   ({ displayName, stats }, ref) => {
-    const pct = Math.min(Math.round(stats.percentWorldTraveled), 100);
+    // Keep one decimal — "4.9%" not a rounded "5%".
+    const pct = Math.min(stats.percentWorldTraveled, 100);
     const today = new Date().toLocaleDateString("en-US", {
       month: "long",
       day: "numeric",
@@ -22,7 +24,7 @@ const PassportCard = forwardRef<ViewShotRef, PassportCardProps>(
     return (
       <ViewShot ref={ref} options={{ format: "png", quality: 1 }}>
         <LinearGradient
-          colors={["#2a1a58", "#111827", "#0a0f1a"]}
+          colors={gradients.passport}
           start={{ x: 0.15, y: 0 }}
           end={{ x: 0.85, y: 1 }}
           style={styles.card}

@@ -143,6 +143,15 @@ export function calculateExplrdScore(input: {
   );
 }
 
+// Cities have no real-world ceiling, so progress is shown against a rolling
+// milestone (the next round number above the current count) rather than a fake
+// "% of all cities on Earth".
+const CITY_MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000];
+
+export function nextCityMilestone(count: number): number {
+  return CITY_MILESTONES.find((m) => m > count) ?? Math.ceil((count + 1) / 5000) * 5000;
+}
+
 export function getExplrdStats(places: SavedPlace[]): ExplrdStats {
   const enrichedPlaces = enrichPlaces(places);
   const uniqueCities = new Set(enrichedPlaces.map((place) => place.resolvedCity).filter(Boolean));

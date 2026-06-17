@@ -10,8 +10,15 @@ import {
 import { SheetScrollContext } from "@/components/Sheet";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { getExplrdStats, getPlaceHierarchy } from "@explrd/shared";
-import type { SavedPlace } from "@explrd/shared";
+import { getExplrdStats, getPlaceHierarchy, nextCityMilestone } from "@explrd/shared";
+import type { ContinentNode, CountryNode, SavedPlace } from "@explrd/shared";
+import { countryFlag } from "@/lib/flags";
+import AnimatedBar from "@/components/AnimatedBar";
+import { colors, gradients, radius, space, type as t, shadow } from "@/lib/theme";
+
+// Finite world totals used to show "X of Y" + how much is left.
+const WORLD_COUNTRIES = 195;
+const WORLD_CONTINENTS = 7;
 
 type Props = {
   places: SavedPlace[];
@@ -20,26 +27,18 @@ type Props = {
   displayName?: string;
 };
 
-type ExpandedState = Record<string, boolean>;
-
-export default function MyPlacesPanel({
-  places,
-  onDelete,
-  deletingId,
-  displayName,
-}: Props) {
-  const [expanded, setExpanded] = useState<ExpandedState>({});
+export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
+  const [open, setOpen] = useState<Record<string, boolean>>({});
 
   const stats = useMemo(() => getExplrdStats(places), [places]);
   const hierarchy = useMemo(() => getPlaceHierarchy(places), [places]);
 
   const toggle = (key: string) =>
-    setExpanded((prev) => ({ ...prev, [key]: !prev[key] }));
+    setOpen((prev) => ({ ...prev, [key]: !prev[key] }));
 
   const confirmDelete = (place: SavedPlace) => {
-    const label =
-      place.name ?? place.city ?? place.formatted ?? place.place_id;
-    Alert.alert("Remove Place", `Remove "${label}" from your passport?`, [
+    const label = place.name ?? place.city ?? place.formatted ?? place.place_id;
+    Alert.alert("Remove Place", `Remove “${label}” from your passport?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
@@ -49,11 +48,10 @@ export default function MyPlacesPanel({
     ]);
   };
 
-  const initial = displayName ? displayName.charAt(0).toUpperCase() : "E";
-  const progressWidth = Math.min(stats.percentWorldTraveled, 100);
+  const worldPct = Math.min(stats.percentWorldTraveled, 100);
 
-  // Collapse the sheet when the user flicks down from the scroll top;
-  // disable scroll entirely unless the sheet is fully open (state 2).
+  // Collapse the sheet on a downward flick at the scroll top; scrolling is only
+  // enabled once the sheet is fully open (handled by the Sheet).
   const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
 
   return (
@@ -69,218 +67,279 @@ export default function MyPlacesPanel({
         }
       }}
     >
-      {/* Dark stats card */}
-      <View style={styles.statsCardWrapper}>
-        <LinearGradient
-          colors={["#0f1829", "#1a3050"]}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 1 }}
-          style={styles.statsCard}
-        >
-          {/* Top row */}
-          <View style={styles.statsCardTopRow}>
-            <Text style={styles.worldExploredLabel}>WORLD EXPLORED</Text>
-            <TouchableOpacity style={styles.snapshotPill}>
-              <Text style={styles.snapshotText}>SNAPSHOT</Text>
-            </TouchableOpacity>
+      {/* ── Hero: world explored ─────────────────────────────────────────── */}
+      <LinearGradient
+        colors={gradients.hero}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
+        style={styles.hero}
+      >
+        <Text style={styles.heroEyebrow}>WORLD EXPLORED</Text>
+
+        <View style={styles.heroPctRow}>
+          <Text style={styles.heroPct}>{stats.percentWorldTraveled}%</Text>
+          <Text style={styles.heroPctCaption}>of the planet</Text>
+        </View>
+
+        <View style={styles.heroTrack}>
+          <LinearGradient
+            colors={gradients.progress}
+            start={{ x: 0, y: 0 }}
+            end={{ x: 1, y: 0 }}
+            style={[styles.heroFill, { width: `${worldPct}%` }]}
+          />
+        </View>
+
+        <View style={styles.heroBars}>
+          <HeroMeter
+            label="Countries"
+            value={stats.uniqueCountries}
+            total={WORLD_COUNTRIES}
+            color="#7cb1ff"
+          />
+          <HeroMeter
+            label="Continents"
+            value={stats.uniqueContinents}
+            total={WORLD_CONTINENTS}
+            color="#b39bff"
+          />
+          <HeroMeter
+            label="Cities"
+            value={stats.uniqueCities}
+            total={nextCityMilestone(stats.uniqueCities)}
+            color="#6ee7b7"
+            milestone
+          />
+        </View>
+      </LinearGradient>
+
+      {/* ── Empty state ──────────────────────────────────────────────────── */}
+      {places.length === 0 ? (
+        <View style={styles.empty}>
+          <View style={styles.emptyIcon}>
+            <Ionicons name="map-outline" size={26} color={colors.muted} />
           </View>
-
-          {/* Large percentage */}
-          <Text style={styles.percentText}>{stats.percentWorldTraveled}%</Text>
-
-          {/* Progress bar */}
-          <View style={styles.progressTrack}>
-            <LinearGradient
-              colors={["#3b82f6", "#8b5cf6"]}
-              start={{ x: 0, y: 0 }}
-              end={{ x: 1, y: 0 }}
-              style={[styles.progressFill, { width: `${progressWidth}%` }]}
-            />
-          </View>
-
-          {/* Bottom stats */}
-          <View style={styles.statsBottomRow}>
-            <StatBox value={stats.uniqueCities} label="CITIES" />
-            <StatBox value={stats.uniqueCountries} label="COUNTRIES" />
-            <StatBox value={stats.uniqueContinents} label="CONTINENTS" />
-          </View>
-        </LinearGradient>
-      </View>
-
-      {/* Empty state */}
-      {places.length === 0 && (
-        <View style={styles.emptyBox}>
           <Text style={styles.emptyTitle}>No places yet</Text>
           <Text style={styles.emptyDesc}>
-            Tap + to save your first city.
+            Search a city or country to start building your passport.
           </Text>
         </View>
+      ) : (
+        hierarchy.map((continent) => (
+          <ContinentSection
+            key={continent.continent}
+            continent={continent}
+            open={open}
+            onToggle={toggle}
+            deletingId={deletingId}
+            onDelete={confirmDelete}
+          />
+        ))
       )}
-
-      {/* Continent list */}
-      {hierarchy.map((continent) => {
-        const continentKey = `c:${continent.continent}`;
-        const isOpen = !!expanded[continentKey];
-        const continentPercent = continent.percentExplored;
-
-        return (
-          <View key={continentKey} style={styles.continentBlock}>
-            {/* Continent header */}
-            <Text style={styles.continentLabel}>CONTINENT</Text>
-            <TouchableOpacity
-              onPress={() => toggle(continentKey)}
-              style={styles.continentRow}
-              activeOpacity={0.7}
-            >
-              <View style={styles.continentLeft}>
-                <Text style={styles.continentName}>{continent.continent}</Text>
-                <View style={styles.continentBadge}>
-                  <Text style={styles.continentBadgeText}>
-                    {continentPercent}%
-                  </Text>
-                </View>
-              </View>
-              <Ionicons
-                name={isOpen ? "chevron-up" : "chevron-down"}
-                size={16}
-                color="#868c94"
-              />
-            </TouchableOpacity>
-
-            <Text style={styles.continentSubtitle}>
-              {continent.exploredCountries}/{continent.totalCountries} countries
-              explored
-            </Text>
-
-            {/* Continent progress bar */}
-            <View style={styles.continentProgressTrack}>
-              <View
-                style={[
-                  styles.continentProgressFill,
-                  { width: `${continentPercent}%` },
-                ]}
-              />
-            </View>
-
-            {/* Country cards */}
-            {isOpen &&
-              continent.countries.map((country) => {
-                const countryKey = `co:${continent.continent}:${country.country}`;
-                const isCountryOpen = !!expanded[countryKey];
-                const countryPct = country.percentExplored ?? 0;
-
-                return (
-                  <View key={countryKey} style={styles.countryCard}>
-                    <TouchableOpacity
-                      onPress={() => toggle(countryKey)}
-                      style={styles.countryCardHeader}
-                      activeOpacity={0.7}
-                    >
-                      <View style={styles.countryCardLeft}>
-                        <Text style={styles.countryName}>
-                          {country.country}
-                        </Text>
-                        <Text style={styles.countryMeta}>
-                          {country.exploredStates > 0
-                            ? `${country.exploredStates} states • `
-                            : ""}
-                          {country.exploredCities} cities
-                        </Text>
-                      </View>
-                      <View style={styles.countryCardRight}>
-                        <Text style={styles.countryPct}>{countryPct}%</Text>
-                        <Ionicons
-                          name={isCountryOpen ? "chevron-up" : "chevron-forward"}
-                          size={14}
-                          color="#868c94"
-                        />
-                      </View>
-                    </TouchableOpacity>
-
-                    {/* Country progress bar */}
-                    <View style={styles.countryProgressTrack}>
-                      <View
-                        style={[
-                          styles.countryProgressFill,
-                          { width: `${countryPct}%` },
-                        ]}
-                      />
-                    </View>
-
-                    {/* State/City/Place rows */}
-                    {isCountryOpen &&
-                      country.statesHierarchy.map((stateNode) => (
-                        <View
-                          key={`${countryKey}:${stateNode.state ?? "null"}`}
-                          style={styles.stateBlock}
-                        >
-                          {stateNode.state ? (
-                            <Text style={styles.stateLabel}>
-                              {stateNode.state}
-                            </Text>
-                          ) : null}
-
-                          {stateNode.cities.map((cityNode) =>
-                            cityNode.places.map((place) => (
-                              <PlaceRow
-                                key={place.place_id}
-                                place={place}
-                                onDelete={confirmDelete}
-                                deleting={deletingId === place.place_id}
-                              />
-                            ))
-                          )}
-                        </View>
-                      ))}
-                  </View>
-                );
-              })}
-          </View>
-        );
-      })}
     </ScrollView>
   );
 }
 
-// ─── Sub-components ──────────────────────────────────────────────────────────
+// ─── Continent section ───────────────────────────────────────────────────────
 
-function StatBox({ value, label }: { value: number; label: string }) {
+function ContinentSection({
+  continent,
+  open,
+  onToggle,
+  deletingId,
+  onDelete,
+}: {
+  continent: ContinentNode;
+  open: Record<string, boolean>;
+  onToggle: (key: string) => void;
+  deletingId: string | null;
+  onDelete: (p: SavedPlace) => void;
+}) {
+  const pct = Math.min(continent.percentExplored, 100);
   return (
-    <View style={styles.statBox}>
-      <Text style={styles.statBoxValue}>{value}</Text>
-      <Text style={styles.statBoxLabel}>{label}</Text>
+    <View style={styles.section}>
+      <View style={styles.sectionHeader}>
+        <Text style={styles.sectionTitle}>{continent.continent}</Text>
+        <Text style={styles.sectionPct}>{continent.percentExplored}%</Text>
+      </View>
+      <Text style={styles.sectionSub}>
+        {continent.exploredCountries} of {continent.totalCountries} countries explored
+      </Text>
+      <View style={styles.sectionTrack}>
+        <View style={[styles.sectionFill, { width: `${pct}%` }]} />
+      </View>
+
+      <View style={styles.group}>
+        {continent.countries.map((country, i) => {
+          const key = `${continent.continent}:${country.country}`;
+          return (
+            <View key={key}>
+              {i > 0 && <View style={styles.separator} />}
+              <CountryRow
+                country={country}
+                isOpen={!!open[key]}
+                onPress={() => onToggle(key)}
+              />
+              {open[key] && (
+                <PlaceList
+                  country={country}
+                  deletingId={deletingId}
+                  onDelete={onDelete}
+                />
+              )}
+            </View>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
+
+// ─── Country row ─────────────────────────────────────────────────────────────
+
+function CountryRow({
+  country,
+  isOpen,
+  onPress,
+}: {
+  country: CountryNode;
+  isOpen: boolean;
+  onPress: () => void;
+}) {
+  const parts: string[] = [];
+  if (country.exploredCities > 0)
+    parts.push(`${country.exploredCities} ${country.exploredCities === 1 ? "city" : "cities"}`);
+  if (country.exploredStates > 0)
+    parts.push(`${country.exploredStates} ${country.exploredStates === 1 ? "state" : "states"}`);
+  const meta = parts.join("  ·  ") || "Explored";
+  const pct = country.percentExplored ?? 0;
+
+  return (
+    <TouchableOpacity style={styles.row} onPress={onPress} activeOpacity={0.6}>
+      <View style={styles.flagWell}>
+        <Text style={styles.flag}>{countryFlag(country.country)}</Text>
+      </View>
+      <View style={styles.rowMid}>
+        <Text style={styles.rowTitle} numberOfLines={1}>
+          {country.country}
+        </Text>
+        <Text style={styles.rowMeta} numberOfLines={1}>
+          {meta}
+        </Text>
+      </View>
+      <View style={styles.rowRight}>
+        <Text style={styles.rowPct}>{pct}%</Text>
+        <Ionicons
+          name={isOpen ? "chevron-up" : "chevron-forward"}
+          size={15}
+          color={colors.faint}
+        />
+      </View>
+    </TouchableOpacity>
+  );
+}
+
+// ─── Expanded place list ─────────────────────────────────────────────────────
+
+function PlaceList({
+  country,
+  deletingId,
+  onDelete,
+}: {
+  country: CountryNode;
+  deletingId: string | null;
+  onDelete: (p: SavedPlace) => void;
+}) {
+  return (
+    <View style={styles.placeList}>
+      {country.statesHierarchy.map((stateNode) => (
+        <View key={stateNode.state ?? "—"}>
+          {stateNode.state ? (
+            <Text style={styles.stateLabel}>{stateNode.state}</Text>
+          ) : null}
+          {stateNode.cities.map((city) =>
+            city.places.map((place) => (
+              <PlaceRow
+                key={place.place_id}
+                place={place}
+                deleting={deletingId === place.place_id}
+                onDelete={onDelete}
+              />
+            )),
+          )}
+        </View>
+      ))}
     </View>
   );
 }
 
 function PlaceRow({
   place,
-  onDelete,
   deleting,
+  onDelete,
 }: {
   place: SavedPlace;
-  onDelete: (p: SavedPlace) => void;
   deleting: boolean;
+  onDelete: (p: SavedPlace) => void;
 }) {
-  const label =
-    place.name ?? place.city ?? place.formatted ?? place.place_id;
+  const label = place.name ?? place.city ?? place.formatted ?? place.place_id;
   return (
     <View style={styles.placeRow}>
-      <Text style={styles.placeLabel} numberOfLines={1}>
+      <View style={styles.placeDot} />
+      <Text style={styles.placeName} numberOfLines={1}>
         {label}
       </Text>
       <TouchableOpacity
         onPress={() => onDelete(place)}
         disabled={deleting}
         hitSlop={10}
-        style={styles.deleteBtn}
+        style={styles.placeRemove}
+        activeOpacity={0.6}
       >
-        {deleting ? (
-          <Text style={styles.deleteBtnText}>…</Text>
-        ) : (
-          <Text style={styles.deleteBtnText}>✕</Text>
-        )}
+        <Ionicons
+          name={deleting ? "ellipsis-horizontal" : "close"}
+          size={14}
+          color={colors.muted}
+        />
       </TouchableOpacity>
+    </View>
+  );
+}
+
+// ─── Hero meter (sliding progress bar) ───────────────────────────────────────
+
+function HeroMeter({
+  label,
+  value,
+  total,
+  color,
+  milestone = false,
+}: {
+  label: string;
+  value: number;
+  total: number;
+  color: string;
+  /** Cities: `total` is a rolling milestone, not a world ceiling. */
+  milestone?: boolean;
+}) {
+  const pct = Math.min((value / total) * 100, 100);
+  const left = Math.max(total - value, 0);
+
+  return (
+    <View style={styles.meterBlock}>
+      <View style={styles.meterTop}>
+        <Text style={styles.meterLabel}>{label}</Text>
+        <Text style={styles.meterValue}>
+          {value}
+          {milestone ? null : <Text style={styles.meterTotal}> / {total}</Text>}
+        </Text>
+      </View>
+      <AnimatedBar pct={pct} height={5} fillColor={color} trackColor="rgba(255,255,255,0.12)" />
+      {left > 0 ? (
+        <Text style={styles.meterLeft}>
+          {milestone ? `${left} to ${total}` : `${left} to go`}
+        </Text>
+      ) : null}
     </View>
   );
 }
@@ -288,257 +347,230 @@ function PlaceRow({
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 100 },
+  container: {
+    paddingHorizontal: space.lg,
+    paddingTop: space.xs,
+    paddingBottom: space.xl,
+  },
 
-  // Header
-  headerRow: {
+  // Hero
+  hero: {
+    borderRadius: radius.lg,
+    padding: space.xl,
+    marginBottom: space.xxl,
+    ...shadow.hero,
+  },
+  heroEyebrow: {
+    ...t.eyebrow,
+    color: colors.onDarkSecondary,
+  },
+  heroPctRow: {
     flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 16,
-  },
-  title: { fontSize: 26, fontWeight: "700", color: "#111214" },
-  avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#e4e6e8",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  avatarText: { fontSize: 20, fontWeight: "600", color: "#3d4249" },
-
-  // Stats card
-  statsCardWrapper: {
-    borderRadius: 20,
-    overflow: "hidden",
-    marginBottom: 24,
-  },
-  statsCard: {
-    borderRadius: 20,
-    padding: 20,
-    minHeight: 180,
-  },
-  statsCardTopRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  worldExploredLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "rgba(255,255,255,0.6)",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  snapshotPill: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.3)",
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 4,
-  },
-  snapshotText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: "#ffffff",
-    letterSpacing: 0.5,
-  },
-  percentText: {
-    fontSize: 36,
-    fontWeight: "800",
-    color: "#ffffff",
-    marginBottom: 4,
-  },
-  progressTrack: {
-    height: 4,
-    backgroundColor: "rgba(255,255,255,0.15)",
-    borderRadius: 2,
-    overflow: "hidden",
-    marginVertical: 8,
-  },
-  progressFill: { height: "100%", borderRadius: 2 },
-  statsBottomRow: {
-    flexDirection: "row",
+    alignItems: "baseline",
     gap: 8,
-    marginTop: 4,
+    marginTop: space.sm,
   },
-  statBox: {
-    flex: 1,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    borderRadius: 12,
-    paddingVertical: 10,
+  heroPct: {
+    fontSize: 52,
+    fontWeight: "800",
+    letterSpacing: -1.6,
+    color: colors.onDark,
+  },
+  heroPctCaption: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: colors.onDarkMuted,
+  },
+  heroTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.14)",
+    overflow: "hidden",
+    marginTop: space.md,
+    marginBottom: space.xl,
+  },
+  heroFill: { height: "100%", borderRadius: 3 },
+
+  // Hero meters (sliding bars)
+  heroBars: { gap: 16 },
+  meterBlock: {},
+  meterTop: {
+    flexDirection: "row",
     alignItems: "center",
+    justifyContent: "space-between",
+    marginBottom: 7,
   },
-  statBoxValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  statBoxLabel: {
-    fontSize: 9,
+  meterLabel: {
+    fontSize: 13,
     fontWeight: "600",
-    color: "rgba(255,255,255,0.6)",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    color: colors.onDark,
+    letterSpacing: -0.2,
+  },
+  meterValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.onDark,
+  },
+  meterTotal: {
+    fontWeight: "500",
+    color: colors.onDarkMuted,
+  },
+  meterLeft: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: colors.onDarkMuted,
+    marginTop: 5,
+  },
+
+  // Continent section
+  section: { marginBottom: space.xxl },
+  sectionHeader: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+  },
+  sectionTitle: {
+    ...t.title,
+    fontSize: 24,
+    fontWeight: "800",
+    letterSpacing: -0.6,
+  },
+  sectionPct: {
+    fontSize: 17,
+    fontWeight: "800",
+    color: colors.blue,
+    letterSpacing: -0.4,
+  },
+  sectionSub: {
+    ...t.footnote,
     marginTop: 2,
   },
+  sectionTrack: {
+    height: 4,
+    borderRadius: 2,
+    backgroundColor: colors.hairline,
+    overflow: "hidden",
+    marginTop: space.sm,
+    marginBottom: space.md,
+  },
+  sectionFill: {
+    height: "100%",
+    borderRadius: 2,
+    backgroundColor: colors.blue,
+  },
 
-  // Continent
-  continentBlock: {
-    marginBottom: 20,
+  // Grouped country card
+  group: {
+    backgroundColor: colors.card,
+    borderRadius: radius.lg,
+    overflow: "hidden",
+    ...shadow.card,
   },
-  continentLabel: {
-    fontSize: 10,
-    fontWeight: "600",
-    color: "#868c94",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-    marginBottom: 6,
+  separator: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: colors.hairline,
+    marginLeft: 14 + 40 + 12, // align past the flag well
   },
-  continentRow: {
+  row: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 4,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    gap: 12,
   },
-  continentLeft: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-  },
-  continentName: {
-    fontSize: 22,
-    fontWeight: "700",
-    color: "#111214",
-  },
-  continentBadge: {
+  flagWell: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: "#ffffff",
-    borderWidth: 1,
-    borderColor: "#e4e6e8",
+    borderRadius: 12,
+    backgroundColor: colors.fill,
     alignItems: "center",
     justifyContent: "center",
   },
-  continentBadgeText: {
-    fontSize: 11,
+  flag: { fontSize: 22, lineHeight: 26 },
+  rowMid: { flex: 1, justifyContent: "center" },
+  rowTitle: {
+    ...t.headline,
     fontWeight: "700",
-    color: "#111214",
   },
-  continentSubtitle: {
-    fontSize: 13,
-    color: "#868c94",
-    marginBottom: 8,
+  rowMeta: {
+    ...t.footnote,
+    marginTop: 1,
   },
-  continentProgressTrack: {
-    height: 4,
-    backgroundColor: "#e4e6e8",
-    borderRadius: 2,
-    overflow: "hidden",
-    marginBottom: 12,
-  },
-  continentProgressFill: {
-    height: "100%",
-    backgroundColor: "#3b82f6",
-    borderRadius: 2,
-  },
-
-  // Country card
-  countryCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 14,
-    marginBottom: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
-    borderWidth: 1,
-    borderColor: "#f0f1f2",
-  },
-  countryCardHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 8,
-  },
-  countryCardLeft: { flex: 1 },
-  countryName: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: "#111214",
-    marginBottom: 2,
-  },
-  countryMeta: { fontSize: 12, color: "#868c94" },
-  countryCardRight: {
+  rowRight: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
   },
-  countryPct: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: "#3b82f6",
-  },
-  countryProgressTrack: {
-    height: 3,
-    backgroundColor: "#f0f1f2",
-    borderRadius: 2,
-    overflow: "hidden",
-  },
-  countryProgressFill: {
-    height: "100%",
-    backgroundColor: "#3b82f6",
-    borderRadius: 2,
+  rowPct: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: colors.blue,
+    letterSpacing: -0.3,
   },
 
-  // State
-  stateBlock: { paddingTop: 8 },
+  // Expanded place list
+  placeList: {
+    paddingLeft: 14 + 40 + 12,
+    paddingRight: 14,
+    paddingBottom: space.sm,
+  },
   stateLabel: {
-    fontSize: 11,
-    fontWeight: "500",
-    color: "#868c94",
-    paddingHorizontal: 4,
-    paddingTop: 8,
-    paddingBottom: 4,
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
+    ...t.eyebrow,
+    marginTop: space.sm,
+    marginBottom: 2,
   },
-
-  // Place row
   placeRow: {
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 4,
-    paddingVertical: 8,
-    borderTopWidth: 1,
-    borderTopColor: "#f7f8f9",
+    paddingVertical: 9,
+    gap: 10,
   },
-  placeLabel: { flex: 1, fontSize: 13, color: "#3d4249" },
-  deleteBtn: { marginLeft: 12, paddingHorizontal: 4 },
-  deleteBtnText: { fontSize: 12, color: "#868c94" },
+  placeDot: {
+    width: 5,
+    height: 5,
+    borderRadius: 2.5,
+    backgroundColor: colors.faint,
+  },
+  placeName: {
+    flex: 1,
+    fontSize: 15,
+    fontWeight: "500",
+    color: colors.inkSecondary,
+    letterSpacing: -0.2,
+  },
+  placeRemove: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.fill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   // Empty
-  emptyBox: {
-    marginTop: 8,
-    marginBottom: 24,
-    padding: 24,
+  empty: {
     alignItems: "center",
-    borderWidth: 1,
-    borderStyle: "dashed",
-    borderColor: "#e4e6e8",
-    borderRadius: 16,
+    paddingVertical: space.xxl,
+    paddingHorizontal: space.xl,
   },
-  emptyTitle: { fontSize: 14, fontWeight: "600", color: "#3d4249" },
+  emptyIcon: {
+    width: 56,
+    height: 56,
+    borderRadius: 28,
+    backgroundColor: colors.fill,
+    alignItems: "center",
+    justifyContent: "center",
+    marginBottom: space.md,
+  },
+  emptyTitle: {
+    ...t.headline,
+    fontWeight: "700",
+  },
   emptyDesc: {
-    fontSize: 13,
-    color: "#868c94",
-    marginTop: 6,
+    ...t.subhead,
+    color: colors.muted,
     textAlign: "center",
-    lineHeight: 19,
+    marginTop: 4,
+    lineHeight: 20,
   },
 });

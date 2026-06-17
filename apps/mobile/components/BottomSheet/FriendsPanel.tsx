@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -12,9 +12,18 @@ import {
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { getExplrdStats } from "@explrd/shared";
-import type { SavedPlace, ExplrdStats } from "@explrd/shared";
+import type {
+  SavedPlace,
+  ExplrdStats,
+  FriendSummary,
+  FriendRequestSummary,
+} from "@explrd/shared";
 import { SheetScrollContext } from "@/components/Sheet";
-import { useFriends, type FriendEntry, type FriendMapFilter } from "@/lib/FriendsContext";
+import { useSession } from "@/lib/SessionContext";
+import { useFriends, type FriendMapFilter } from "@/lib/FriendsContext";
+import { searchUsers } from "@/lib/api";
+import { colors } from "@/lib/theme";
+import { gradients } from "@/lib/theme";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -27,10 +36,14 @@ const AVATAR_GRADIENTS: [string, string][] = [
   ["#f97316", "#eab308"],
 ];
 
-function gradientFor(slug: string): [string, string] {
+function gradientFor(key: string): [string, string] {
   let h = 0;
-  for (let i = 0; i < slug.length; i++) h = (h * 31 + slug.charCodeAt(i)) >>> 0;
+  for (let i = 0; i < key.length; i++) h = (h * 31 + key.charCodeAt(i)) >>> 0;
   return AVATAR_GRADIENTS[h % AVATAR_GRADIENTS.length];
+}
+
+function nameOf(f: FriendSummary): string {
+  return f.display_name ?? f.username ?? "Explorer";
 }
 
 function initialsOf(name: string): string {
@@ -53,7 +66,6 @@ function cityCountryKey(p: SavedPlace): string {
   return `${city}|${country}`;
 }
 
-/** Country the user has saved the most places in, with its count. */
 function topCountry(places: SavedPlace[]): { country: string; count: number } | null {
   const counts = new Map<string, number>();
   for (const p of places) {
@@ -76,54 +88,135 @@ type Props = {
 };
 
 export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
+  const { session } = useSession();
   const {
     friends,
-    selectedSlug,
+    incoming,
+    outgoing,
+    loading,
+    selectedId,
     selectedData,
-    loadingSlug,
+    loadingId,
     mapFilter,
     setMapFilter,
     selectFriend,
-    addFriend,
+    sendRequest,
+    acceptRequest,
+    rejectRequest,
     removeFriend,
   } = useFriends();
 
-  const [adding, setAdding] = useState(false);
-  const [slugInput, setSlugInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<FriendSummary[]>([]);
+  const [searching, setSearching] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
-  const [addBusy, setAddBusy] = useState(false);
+  const [addNote, setAddNote] = useState<string | null>(null);
+  const [addBusyId, setAddBusyId] = useState<string | null>(null);
+  const [busyReq, setBusyReq] = useState<string | null>(null);
+
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
 
   const myStats = useMemo(() => getExplrdStats(myPlaces), [myPlaces]);
 
-  const handleAdd = async () => {
-    if (addBusy) return;
-    setAddBusy(true);
+  // Relationship lookups so search rows can show "Friends" / "Pending".
+  const friendIds = useMemo(() => new Set(friends.map((f) => f.user_id)), [friends]);
+  const outgoingIds = useMemo(() => new Set(outgoing.map((r) => r.user_id)), [outgoing]);
+
+  // ── Live people search (name or @username) ────────────────────────────────
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
     setAddError(null);
+    setAddNote(null);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    const q = text.trim();
+    if (q.length < 2) {
+      searchAbortRef.current?.abort();
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    searchDebounceRef.current = setTimeout(async () => {
+      if (!session?.access_token) return;
+      searchAbortRef.current?.abort();
+      searchAbortRef.current = new AbortController();
+      setSearching(true);
+      try {
+        const res = await searchUsers(session.access_token, q, searchAbortRef.current.signal);
+        setSearchResults(res);
+      } catch (e) {
+        if ((e as Error)?.name !== "AbortError") setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+  };
+
+  useEffect(
+    () => () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      searchAbortRef.current?.abort();
+    },
+    [],
+  );
+
+  const handleAddUser = async (target: FriendSummary) => {
+    if (addBusyId || !target.username) return;
+    setAddBusyId(target.user_id);
+    setAddError(null);
+    setAddNote(null);
     try {
-      await addFriend(slugInput);
-      setSlugInput("");
-      setAdding(false);
+      const status = await sendRequest(target.username);
+      setAddNote(
+        status === "accepted"
+          ? `You're now friends with ${firstName(nameOf(target))}! 🎉`
+          : `Request sent to ${firstName(nameOf(target))} — waiting on them to accept.`,
+      );
+      setSearchQuery("");
+      setSearchResults([]);
     } catch (e) {
-      setAddError(e instanceof Error ? e.message : "Couldn't add friend.");
+      setAddError(e instanceof Error ? e.message : "Couldn't send request.");
     } finally {
-      setAddBusy(false);
+      setAddBusyId(null);
     }
   };
 
-  const confirmRemove = (friend: FriendEntry) => {
-    Alert.alert("Remove Friend", `Remove ${friend.displayName} from your friends?`, [
+  const handleAccept = async (req: FriendRequestSummary) => {
+    setBusyReq(req.request_id);
+    try {
+      await acceptRequest(req.request_id);
+    } catch (e) {
+      Alert.alert("Couldn't accept", e instanceof Error ? e.message : "Try again.");
+    } finally {
+      setBusyReq(null);
+    }
+  };
+
+  const handleReject = async (req: FriendRequestSummary) => {
+    setBusyReq(req.request_id);
+    try {
+      await rejectRequest(req.request_id);
+    } catch (e) {
+      Alert.alert("Couldn't decline", e instanceof Error ? e.message : "Try again.");
+    } finally {
+      setBusyReq(null);
+    }
+  };
+
+  const confirmRemove = (friend: FriendSummary) => {
+    Alert.alert("Remove Friend", `Remove ${nameOf(friend)} from your friends?`, [
       { text: "Cancel", style: "cancel" },
       {
         text: "Remove",
         style: "destructive",
-        onPress: () => void removeFriend(friend.slug),
+        onPress: () => void removeFriend(friend.user_id),
       },
     ]);
   };
 
-  const selectedFriend = friends.find((f) => f.slug === selectedSlug) ?? null;
+  const selectedFriend = friends.find((f) => f.user_id === selectedId) ?? null;
 
   return (
     <ScrollView
@@ -139,143 +232,290 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
         }
       }}
     >
-      {/* ── Friend rail ─────────────────────────────────────────────────────── */}
-      <ScrollView
-        horizontal
-        showsHorizontalScrollIndicator={false}
-        contentContainerStyle={styles.rail}
-      >
-        {friends.map((friend) => {
-          const isSelected = friend.slug === selectedSlug;
-          const isLoading = friend.slug === loadingSlug;
-          return (
-            <TouchableOpacity
-              key={friend.slug}
-              style={styles.railItem}
-              activeOpacity={0.8}
-              onPress={() => selectFriend(isSelected ? null : friend.slug)}
-              onLongPress={() => confirmRemove(friend)}
-            >
-              <View style={[styles.avatarRing, isSelected && styles.avatarRingActive]}>
-                <LinearGradient
-                  colors={gradientFor(friend.slug)}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 1 }}
-                  style={styles.avatar}
-                >
-                  {isLoading ? (
-                    <ActivityIndicator color="#ffffff" size="small" />
+      {/* ── Find friends by name or @username ───────────────────────────────── */}
+      <Text style={styles.sectionLabel}>ADD A FRIEND</Text>
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={17} color={colors.muted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by name or @username"
+          placeholderTextColor={colors.faint}
+          autoCapitalize="none"
+          autoCorrect={false}
+          value={searchQuery}
+          onChangeText={handleSearchChange}
+          returnKeyType="search"
+        />
+        {searching ? (
+          <ActivityIndicator color={colors.muted} size="small" />
+        ) : searchQuery.length > 0 ? (
+          <TouchableOpacity
+            onPress={() => handleSearchChange("")}
+            hitSlop={8}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close-circle" size={18} color={colors.faint} />
+          </TouchableOpacity>
+        ) : null}
+      </View>
+
+      {/* Search results dropdown */}
+      {searchQuery.trim().length >= 2 && (
+        <View style={styles.searchResults}>
+          {searchResults.length === 0 && !searching ? (
+            <Text style={styles.searchEmpty}>No one found by that name.</Text>
+          ) : (
+            searchResults.map((u) => {
+              const isFriend = friendIds.has(u.user_id);
+              const isPending = outgoingIds.has(u.user_id);
+              const busy = addBusyId === u.user_id;
+              return (
+                <View key={u.user_id} style={styles.resultRow}>
+                  <LinearGradient
+                    colors={gradientFor(u.user_id)}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.resultAvatar}
+                  >
+                    <Text style={styles.resultAvatarText}>{initialsOf(nameOf(u))}</Text>
+                  </LinearGradient>
+                  <View style={styles.resultMid}>
+                    <Text style={styles.resultName} numberOfLines={1}>
+                      {nameOf(u)}
+                    </Text>
+                    {u.username && (
+                      <Text style={styles.resultHandle} numberOfLines={1}>
+                        @{u.username}
+                      </Text>
+                    )}
+                  </View>
+                  {isFriend ? (
+                    <View style={styles.resultTag}>
+                      <Ionicons name="checkmark" size={14} color={colors.success} />
+                      <Text style={[styles.resultTagText, { color: colors.success }]}>
+                        Friends
+                      </Text>
+                    </View>
+                  ) : isPending ? (
+                    <View style={styles.resultTag}>
+                      <Text style={styles.resultTagText}>Pending</Text>
+                    </View>
                   ) : (
-                    <Text style={styles.avatarText}>{initialsOf(friend.displayName)}</Text>
+                    <TouchableOpacity
+                      style={styles.resultAddBtn}
+                      onPress={() => handleAddUser(u)}
+                      disabled={busy}
+                      activeOpacity={0.8}
+                    >
+                      {busy ? (
+                        <ActivityIndicator color="#ffffff" size="small" />
+                      ) : (
+                        <Text style={styles.resultAddText}>Add</Text>
+                      )}
+                    </TouchableOpacity>
                   )}
-                </LinearGradient>
-              </View>
-              <Text
-                style={[styles.railName, isSelected && styles.railNameActive]}
-                numberOfLines={1}
-              >
-                {firstName(friend.displayName)}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-
-        {/* Add friend */}
-        <TouchableOpacity
-          style={styles.railItem}
-          activeOpacity={0.8}
-          onPress={() => {
-            setAdding((v) => !v);
-            setAddError(null);
-          }}
-        >
-          <View style={[styles.avatarRing, adding && styles.avatarRingActive]}>
-            <View style={styles.addCircle}>
-              <Ionicons name="add" size={26} color="#3d4249" />
-            </View>
-          </View>
-          <Text style={styles.railName}>Add</Text>
-        </TouchableOpacity>
-      </ScrollView>
-
-      {/* ── Add friend form ─────────────────────────────────────────────────── */}
-      {adding && (
-        <View style={styles.addBox}>
-          <Text style={styles.addTitle}>Add a friend</Text>
-          <Text style={styles.addHint}>
-            Paste their explrd profile link or username. They can find it under
-            Profile → public link.
-          </Text>
-          <View style={styles.addRow}>
-            <TextInput
-              style={styles.addInput}
-              placeholder="explrd.app/u/username"
-              placeholderTextColor="#a5abb3"
-              autoCapitalize="none"
-              autoCorrect={false}
-              value={slugInput}
-              onChangeText={setSlugInput}
-              onSubmitEditing={handleAdd}
-              returnKeyType="done"
-            />
-            <TouchableOpacity
-              style={[styles.addBtn, addBusy && { opacity: 0.6 }]}
-              onPress={handleAdd}
-              disabled={addBusy}
-              activeOpacity={0.8}
-            >
-              {addBusy ? (
-                <ActivityIndicator color="#ffffff" size="small" />
-              ) : (
-                <Text style={styles.addBtnText}>Add</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-          {addError && <Text style={styles.addError}>{addError}</Text>}
+                </View>
+              );
+            })
+          )}
         </View>
+      )}
+      {addError && <Text style={styles.addError}>{addError}</Text>}
+      {addNote && <Text style={styles.addNote}>{addNote}</Text>}
+
+      {/* ── Incoming requests ───────────────────────────────────────────────── */}
+      {incoming.length > 0 && (
+        <View style={styles.requestsBlock}>
+          <Text style={styles.sectionLabel}>
+            FRIEND REQUESTS ({incoming.length})
+          </Text>
+          {incoming.map((req) => (
+            <View key={req.request_id} style={styles.requestRow}>
+              <LinearGradient
+                colors={gradientFor(req.user_id)}
+                start={{ x: 0, y: 0 }}
+                end={{ x: 1, y: 1 }}
+                style={styles.requestAvatar}
+              >
+                <Text style={styles.requestAvatarText}>{initialsOf(nameOf(req))}</Text>
+              </LinearGradient>
+              <View style={styles.requestMid}>
+                <Text style={styles.requestName} numberOfLines={1}>
+                  {nameOf(req)}
+                </Text>
+                {req.username && (
+                  <Text style={styles.requestHandle} numberOfLines={1}>
+                    @{req.username}
+                  </Text>
+                )}
+              </View>
+              {busyReq === req.request_id ? (
+                <ActivityIndicator color={colors.blue} style={{ marginRight: 8 }} />
+              ) : (
+                <View style={styles.requestActions}>
+                  <TouchableOpacity
+                    style={styles.declineBtn}
+                    onPress={() => handleReject(req)}
+                    activeOpacity={0.7}
+                    hitSlop={6}
+                  >
+                    <Ionicons name="close" size={20} color={colors.inkSecondary} />
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.acceptBtn}
+                    onPress={() => handleAccept(req)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.acceptBtnText}>Accept</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+            </View>
+          ))}
+        </View>
+      )}
+
+      {/* ── Friend rail ─────────────────────────────────────────────────────── */}
+      {(friends.length > 0 || outgoing.length > 0) && (
+        <>
+          <Text style={[styles.sectionLabel, { marginTop: 18 }]}>YOUR FRIENDS</Text>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.rail}
+          >
+            {friends.map((friend) => {
+              const isSelected = friend.user_id === selectedId;
+              const isLoading = friend.user_id === loadingId;
+              return (
+                <TouchableOpacity
+                  key={friend.user_id}
+                  style={styles.railItem}
+                  activeOpacity={0.8}
+                  onPress={() => selectFriend(isSelected ? null : friend)}
+                  onLongPress={() => confirmRemove(friend)}
+                >
+                  <View style={[styles.avatarRing, isSelected && styles.avatarRingActive]}>
+                    <LinearGradient
+                      colors={gradientFor(friend.user_id)}
+                      start={{ x: 0, y: 0 }}
+                      end={{ x: 1, y: 1 }}
+                      style={styles.avatar}
+                    >
+                      {isLoading ? (
+                        <ActivityIndicator color="#ffffff" size="small" />
+                      ) : (
+                        <Text style={styles.avatarText}>{initialsOf(nameOf(friend))}</Text>
+                      )}
+                    </LinearGradient>
+                  </View>
+                  <Text
+                    style={[styles.railName, isSelected && styles.railNameActive]}
+                    numberOfLines={1}
+                  >
+                    {firstName(nameOf(friend))}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+
+            {/* Pending outgoing — dimmed, with a tap-to-withdraw */}
+            {outgoing.map((req) => (
+              <TouchableOpacity
+                key={req.request_id}
+                style={styles.railItem}
+                activeOpacity={0.8}
+                onPress={() =>
+                  Alert.alert(
+                    "Pending request",
+                    `Waiting for ${nameOf(req)} to accept. Withdraw it?`,
+                    [
+                      { text: "Keep waiting", style: "cancel" },
+                      {
+                        text: "Withdraw",
+                        style: "destructive",
+                        onPress: () => void removeFriend(req.user_id),
+                      },
+                    ],
+                  )
+                }
+              >
+                <View style={[styles.avatarRing, styles.avatarRingPending]}>
+                  <View style={styles.pendingAvatar}>
+                    <Text style={styles.pendingAvatarText}>{initialsOf(nameOf(req))}</Text>
+                  </View>
+                  <View style={styles.pendingBadge}>
+                    <Ionicons name="time" size={11} color="#ffffff" />
+                  </View>
+                </View>
+                <Text style={styles.railName} numberOfLines={1}>
+                  {firstName(nameOf(req))}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        </>
       )}
 
       {/* ── Body ────────────────────────────────────────────────────────────── */}
-      {friends.length === 0 && !adding && (
+      {loading && friends.length === 0 && incoming.length === 0 && (
+        <View style={styles.loadingBox}>
+          <ActivityIndicator color={colors.blue} />
+        </View>
+      )}
+
+      {!loading && friends.length === 0 && incoming.length === 0 && outgoing.length === 0 && (
         <View style={styles.emptyBox}>
           <Text style={styles.emptyTitle}>No friends yet</Text>
           <Text style={styles.emptyDesc}>
-            Add a friend with their explrd profile link to explore their globe
-            and compare your travels.
+            Add a friend by their @username above. Once they accept, you'll see
+            their globe and how your travels compare.
           </Text>
         </View>
       )}
 
-      {friends.length > 0 && !selectedFriend && !adding && (
+      {friends.length > 0 && !selectedFriend && (
         <View style={styles.emptyBox}>
           <Text style={styles.emptyTitle}>Pick a friend</Text>
           <Text style={styles.emptyDesc}>
-            Tap a friend above to light up their places on the globe and see
-            how your adventures compare.
+            Tap a friend above to light up their places on the globe and see how
+            your adventures compare.
           </Text>
         </View>
       )}
 
-      {selectedFriend && !selectedData && loadingSlug === selectedFriend.slug && (
+      {selectedFriend && !selectedData && loadingId === selectedFriend.user_id && (
         <View style={styles.loadingBox}>
-          <ActivityIndicator color="#3b82f6" />
+          <ActivityIndicator color={colors.blue} />
           <Text style={styles.loadingText}>
-            Loading {firstName(selectedFriend.displayName)}'s globe…
+            Loading {firstName(nameOf(selectedFriend))}'s globe…
           </Text>
         </View>
       )}
 
       {selectedFriend && selectedData && (
-        <FriendDetail
-          friendName={selectedData.displayName}
-          friendPlaces={selectedData.places}
-          friendStats={selectedData.stats}
-          myName={myDisplayName}
-          myPlaces={myPlaces}
-          myStats={myStats}
-          mapFilter={mapFilter}
-          setMapFilter={setMapFilter}
-        />
+        <>
+          <FriendDetail
+            friendName={selectedData.displayName}
+            friendPlaces={selectedData.places}
+            friendStats={selectedData.stats}
+            myName={myDisplayName}
+            myPlaces={myPlaces}
+            myStats={myStats}
+            mapFilter={mapFilter}
+            setMapFilter={setMapFilter}
+          />
+          <TouchableOpacity
+            style={styles.removeFriendBtn}
+            onPress={() => confirmRemove(selectedFriend)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="person-remove-outline" size={17} color={colors.danger} />
+            <Text style={styles.removeFriendText}>
+              Remove {firstName(nameOf(selectedFriend))}
+            </Text>
+          </TouchableOpacity>
+        </>
       )}
     </ScrollView>
   );
@@ -349,15 +589,15 @@ function FriendDetail({
         />
       </View>
       <View style={styles.legendRow}>
-        {mapFilter === "both" && <LegendDot color="#111214" label="You" />}
-        <LegendDot color="#3b82f6" label={friendFirst} />
+        {mapFilter === "both" && <LegendDot color={colors.ink} label="You" />}
+        <LegendDot color={colors.blue} label={friendFirst} />
         {mapFilter === "both" && <LegendDot color="#8b5cf6" label="Both of you" />}
       </View>
 
       {/* VS card */}
       <View style={styles.vsCardWrapper}>
         <LinearGradient
-          colors={["#0f1829", "#1a3050"]}
+          colors={gradients.hero}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
           style={styles.vsCard}
@@ -517,7 +757,7 @@ function FactCard({
   return (
     <View style={styles.factCard}>
       <View style={styles.factIconWrap}>
-        <Ionicons name={icon} size={18} color="#3b82f6" />
+        <Ionicons name={icon} size={18} color={colors.blue} />
       </View>
       <View style={styles.factBody}>
         <Text style={styles.factTitle}>{title}</Text>
@@ -533,8 +773,117 @@ function FactCard({
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 100 },
 
+  // Find friends — search field + results dropdown
+  searchWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    backgroundColor: colors.fill,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    paddingHorizontal: 14,
+  },
+  searchInput: {
+    flex: 1,
+    paddingVertical: 11,
+    fontSize: 15,
+    color: colors.ink,
+  },
+  searchResults: { marginTop: 8 },
+  searchEmpty: {
+    fontSize: 13,
+    color: colors.muted,
+    paddingVertical: 12,
+    textAlign: "center",
+  },
+  resultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    gap: 12,
+  },
+  resultAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultAvatarText: { fontSize: 14, fontWeight: "700", color: "#ffffff" },
+  resultMid: { flex: 1 },
+  resultName: { fontSize: 15, fontWeight: "700", color: colors.ink },
+  resultHandle: { fontSize: 12, color: colors.muted, marginTop: 1 },
+  resultAddBtn: {
+    backgroundColor: colors.blue,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    minWidth: 60,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultAddText: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
+  resultTag: { flexDirection: "row", alignItems: "center", gap: 4 },
+  resultTagText: { fontSize: 12, fontWeight: "600", color: colors.muted },
+  addError: { marginTop: 8, fontSize: 12, color: colors.danger },
+  addNote: { marginTop: 8, fontSize: 12, color: colors.success, fontWeight: "500" },
+
+  // Remove friend
+  removeFriendBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 8,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: colors.dangerSoft,
+  },
+  removeFriendText: { fontSize: 15, fontWeight: "700", color: colors.danger },
+
+  // Requests
+  requestsBlock: { marginTop: 20 },
+  requestRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 10,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+  },
+  requestAvatar: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  requestAvatarText: { fontSize: 15, fontWeight: "700", color: "#ffffff" },
+  requestMid: { flex: 1, marginLeft: 12 },
+  requestName: { fontSize: 15, fontWeight: "700", color: colors.ink },
+  requestHandle: { fontSize: 12, color: colors.muted, marginTop: 1 },
+  requestActions: { flexDirection: "row", alignItems: "center", gap: 8 },
+  declineBtn: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.fill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  acceptBtn: {
+    backgroundColor: colors.blue,
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    paddingVertical: 9,
+  },
+  acceptBtnText: { color: "#ffffff", fontSize: 14, fontWeight: "700" },
+
   // Rail
-  rail: { gap: 14, paddingBottom: 16, paddingRight: 8 },
+  rail: { gap: 14, paddingVertical: 8, paddingRight: 8 },
   railItem: { alignItems: "center", width: 64 },
   avatarRing: {
     width: 62,
@@ -545,7 +894,8 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  avatarRingActive: { borderColor: "#111214" },
+  avatarRingActive: { borderColor: colors.ink },
+  avatarRingPending: { opacity: 0.85 },
   avatar: {
     width: 54,
     height: 54,
@@ -554,86 +904,66 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   avatarText: { fontSize: 18, fontWeight: "700", color: "#ffffff" },
-  addCircle: {
+  pendingAvatar: {
     width: 54,
     height: 54,
     borderRadius: 27,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: colors.fill,
     borderWidth: 1.5,
     borderStyle: "dashed",
     borderColor: "#c3c8cf",
+  },
+  pendingAvatarText: { fontSize: 16, fontWeight: "700", color: colors.muted },
+  pendingBadge: {
+    position: "absolute",
+    bottom: 2,
+    right: 2,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
+    backgroundColor: "#f59e0b",
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "#f7f8f9",
+    borderWidth: 2,
+    borderColor: colors.bg,
   },
   railName: {
     marginTop: 5,
     fontSize: 11,
     fontWeight: "500",
-    color: "#868c94",
+    color: colors.muted,
     maxWidth: 64,
   },
-  railNameActive: { color: "#111214", fontWeight: "700" },
-
-  // Add form
-  addBox: {
-    backgroundColor: "#f7f8f9",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 18,
-    borderWidth: 1,
-    borderColor: "#ebebf0",
-  },
-  addTitle: { fontSize: 15, fontWeight: "700", color: "#111214", marginBottom: 4 },
-  addHint: { fontSize: 12, color: "#868c94", lineHeight: 17, marginBottom: 12 },
-  addRow: { flexDirection: "row", gap: 8 },
-  addInput: {
-    flex: 1,
-    backgroundColor: "#ffffff",
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: "#e4e6e8",
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    fontSize: 14,
-    color: "#111214",
-  },
-  addBtn: {
-    backgroundColor: "#111214",
-    borderRadius: 12,
-    paddingHorizontal: 18,
-    alignItems: "center",
-    justifyContent: "center",
-    minWidth: 64,
-  },
-  addBtnText: { color: "#ffffff", fontSize: 14, fontWeight: "600" },
-  addError: { marginTop: 10, fontSize: 12, color: "#ef4444" },
+  railNameActive: { color: colors.ink, fontWeight: "700" },
 
   // Empty / loading
   emptyBox: {
-    marginTop: 8,
+    marginTop: 18,
     padding: 24,
     alignItems: "center",
     borderWidth: 1,
     borderStyle: "dashed",
-    borderColor: "#e4e6e8",
+    borderColor: colors.hairline,
     borderRadius: 16,
   },
-  emptyTitle: { fontSize: 14, fontWeight: "600", color: "#3d4249" },
+  emptyTitle: { fontSize: 14, fontWeight: "600", color: colors.inkSecondary },
   emptyDesc: {
     fontSize: 13,
-    color: "#868c94",
+    color: colors.muted,
     marginTop: 6,
     textAlign: "center",
     lineHeight: 19,
   },
   loadingBox: { alignItems: "center", paddingVertical: 32, gap: 10 },
-  loadingText: { fontSize: 13, color: "#868c94" },
+  loadingText: { fontSize: 13, color: colors.muted },
 
   // Section
   sectionLabel: {
     fontSize: 10,
     fontWeight: "600",
-    color: "#868c94",
+    color: colors.muted,
     textTransform: "uppercase",
     letterSpacing: 1,
     marginBottom: 8,
@@ -645,17 +975,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 8,
     borderRadius: 999,
-    backgroundColor: "#f2f2f7",
+    backgroundColor: colors.fill,
     borderWidth: 1,
-    borderColor: "#ebebf0",
+    borderColor: colors.hairline,
   },
-  chipActive: { backgroundColor: "#111214", borderColor: "#111214" },
-  chipText: { fontSize: 12, fontWeight: "600", color: "#3d4249" },
+  chipActive: { backgroundColor: colors.ink, borderColor: colors.ink },
+  chipText: { fontSize: 12, fontWeight: "600", color: colors.inkSecondary },
   chipTextActive: { color: "#ffffff" },
   legendRow: { flexDirection: "row", gap: 14, marginBottom: 18 },
   legendItem: { flexDirection: "row", alignItems: "center", gap: 5 },
   legendDot: { width: 8, height: 8, borderRadius: 4 },
-  legendText: { fontSize: 11, color: "#868c94", fontWeight: "500" },
+  legendText: { fontSize: 11, color: colors.muted, fontWeight: "500" },
 
   // VS card
   vsCardWrapper: { borderRadius: 20, overflow: "hidden", marginBottom: 22 },
@@ -690,7 +1020,7 @@ const styles = StyleSheet.create({
   vsBarTrack: { flexDirection: "row", height: 5, borderRadius: 3, overflow: "hidden" },
   vsBarMine: { backgroundColor: "#ffffff", borderRadius: 3 },
   vsBarGap: { width: 3 },
-  vsBarTheirs: { backgroundColor: "#3b82f6", borderRadius: 3 },
+  vsBarTheirs: { backgroundColor: colors.blue, borderRadius: 3 },
   vsFooter: {
     marginTop: 8,
     fontSize: 12,
@@ -701,12 +1031,12 @@ const styles = StyleSheet.create({
   // Fact cards
   factCard: {
     flexDirection: "row",
-    backgroundColor: "#ffffff",
+    backgroundColor: colors.card,
     borderRadius: 16,
     padding: 14,
     marginBottom: 10,
     borderWidth: 1,
-    borderColor: "#f0f1f2",
+    borderColor: colors.hairline,
     shadowColor: "#000",
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.04,
@@ -717,7 +1047,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "#eef4ff",
+    backgroundColor: colors.blueSoft,
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
@@ -726,11 +1056,11 @@ const styles = StyleSheet.create({
   factTitle: {
     fontSize: 11,
     fontWeight: "600",
-    color: "#868c94",
+    color: colors.muted,
     textTransform: "uppercase",
     letterSpacing: 0.4,
     marginBottom: 2,
   },
-  factBig: { fontSize: 16, fontWeight: "700", color: "#111214" },
-  factSub: { fontSize: 12, color: "#868c94", marginTop: 3, lineHeight: 17 },
+  factBig: { fontSize: 16, fontWeight: "700", color: colors.ink },
+  factSub: { fontSize: 12, color: colors.muted, marginTop: 3, lineHeight: 17 },
 });

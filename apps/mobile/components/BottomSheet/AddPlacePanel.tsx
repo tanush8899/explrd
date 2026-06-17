@@ -14,8 +14,9 @@ import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
 import { searchPlaces, savePin, type GeoResult } from "@/lib/api";
 import type { SavedPlace } from "@explrd/shared";
+import { colors } from "@/lib/theme";
 
-const BLUE = "#0a84ff";
+const BLUE = colors.blue;
 
 type Props = {
   places: SavedPlace[];
@@ -47,6 +48,7 @@ export default function AddPlacePanel({
 
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<TextInput>(null);
   const [kbHeight, setKbHeight] = useState(0);
 
   useEffect(() => {
@@ -128,11 +130,13 @@ export default function AddPlacePanel({
         country_boundary: null,
         continent_boundary: null,
       } satisfies SavedPlace);
-      // Clear selection and go back to search
+      // Hand control to the parent — it plays the stamp and keeps us in the add
+      // flow so the next city can be added immediately. Reset to a clean search
+      // and refocus so the user can just keep typing.
       setSelected(null);
       setQuery("");
       setResults([]);
-      onDeselectPlace();
+      setTimeout(() => inputRef.current?.focus(), 250);
     } catch (e: unknown) {
       setError((e as Error)?.message ?? "Failed to save. Try again.");
     } finally {
@@ -237,11 +241,12 @@ export default function AddPlacePanel({
         }
       }}
     >
-      <Text style={styles.subtitle}>Enter a city, landmark, or country</Text>
+      <Text style={styles.subtitle}>Search a city or landmark — only cities can be added</Text>
 
       {/* Search input — Flighty's flat grey capsule field */}
       <View style={styles.inputRow}>
         <TextInput
+          ref={inputRef}
           style={styles.input}
           placeholder="Search city, landmark, university, park…"
           placeholderTextColor="#868c94"
@@ -307,8 +312,8 @@ export default function AddPlacePanel({
       {!searching && query.length > 2 && results.length === 0 && (
         <View style={styles.emptyState}>
           <Ionicons name="search" size={26} color="#c6c9ce" />
-          <Text style={styles.emptyTitle}>No Results</Text>
-          <Text style={styles.emptyDesc}>Try a city, landmark, or country name</Text>
+          <Text style={styles.emptyTitle}>No Cities Found</Text>
+          <Text style={styles.emptyDesc}>Try a city or a famous landmark</Text>
         </View>
       )}
 
@@ -330,19 +335,19 @@ const styles = StyleSheet.create({
   // ── Search view ────────────────────────────────────────────────────────────
   container: {
     paddingHorizontal: 20,
-    paddingTop: 0,
+    paddingTop: 6,
   },
   subtitle: {
     fontSize: 14,
     color: "#85898f",
-    marginTop: -8,
+    marginTop: 2,
     marginBottom: 14,
   },
   inputRow: {
     flexDirection: "row",
     alignItems: "center",
     borderRadius: 14,
-    backgroundColor: "#eff1f3",
+    backgroundColor: colors.fillSecondary,
     paddingHorizontal: 16,
     marginBottom: 4,
   },
@@ -370,7 +375,7 @@ const styles = StyleSheet.create({
   errorText: {
     marginTop: 10,
     fontSize: 13,
-    color: "#ff453a",
+    color: colors.danger,
   },
 
   // Results — Flighty's icon rows
@@ -387,7 +392,7 @@ const styles = StyleSheet.create({
     width: 38,
     height: 38,
     borderRadius: 19,
-    backgroundColor: "rgba(10,132,255,0.10)",
+    backgroundColor: colors.blueSoft,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -472,7 +477,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: "rgba(10,132,255,0.10)",
+    backgroundColor: colors.blueSoft,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -514,11 +519,11 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     paddingVertical: 16,
     alignItems: "center",
-    backgroundColor: "rgba(255,69,58,0.10)",
+    backgroundColor: colors.dangerSoft,
   },
   removeBtnText: {
     fontSize: 16,
     fontWeight: "600",
-    color: "#ff453a",
+    color: colors.danger,
   },
 });
