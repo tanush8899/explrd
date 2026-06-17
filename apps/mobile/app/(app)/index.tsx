@@ -27,7 +27,7 @@ const TAB_TITLES: Record<ActiveTab, string> = {
   places: "My Places",
   friends: "Friends",
   passport: "Passport",
-  add: "Add Place",
+  add: "Add a City",
   profile: "Profile",
 };
 
@@ -166,14 +166,13 @@ export default function MainScreen() {
           : [optimistic, ...prev],
       );
       refresh();
-      // One clean transition: dismiss the keyboard, clear the search preview, play
-      // the stamp celebration, and land the user on their passport (My Places) with
-      // the new place at the top. A single snap — no fighting programmatic snaps.
-      Keyboard.dismiss();
+      // Play the stamp celebration, then keep the user in the add flow so they
+      // can add another city back-to-back. AddPlacePanel resets to a clean,
+      // focused search; the close (X) button is how they finish and return.
       setPreviewCoord(null);
       setStampPlace(optimistic);
-      setActiveTab("places");
-      sheetRef.current?.snapTo(1);
+      setActiveTab("add");
+      sheetRef.current?.snapTo(2);
     },
     [setPlaces, refresh],
   );
@@ -217,7 +216,7 @@ export default function MainScreen() {
         title={TAB_TITLES[activeTab]}
         avatarLabel={avatarLabel}
         onAvatarPress={handleAvatarPress}
-        searchPlaceholder="Search city, country…"
+        searchPlaceholder="Search a city…"
         onSearchPillPress={handleSearchPillPress}
         showCloseButton={activeTab === "add" || activeTab === "profile"}
         onClose={activeTab === "profile" ? handleProfileClose : handleSearchClose}

@@ -1,0 +1,71 @@
+import { NextResponse } from "next/server";
+import { getAuthedUser, serverError } from "@/lib/api-auth";
+import type { FriendSummary } from "@/lib/types";
+
+export const runtime = "nodejs";
+
+type ProfileRow = {
+  user_id: string;
+  username: string | null;
+  display_name: string | null;
+  first_name: string | null;
+  last_name: string | null;
+};
+
+/** Escape PostgREST `or`/`ilike` wildcards so a search term can't break the filter. */
+function escapeLike(term: string): string {
+  return term.replace(/[%,()]/g, " ").trim();
+}
+
+/**
+ * GET /api/friends/search?q= → { results: FriendSummary[] }
+ * Find people by name or @username so they can be added as friends. Only profiles
+ * that have claimed a username are returned (those are the ones we can request).
+ */
+export async function GET(req: Request) {
+  try {
+    const auth = await getAuthedUser(req);
+    if ("response" in auth) return auth.response;
+    const { supabase, user } = auth;
+
+    const url = new URL(req.url);
+    const q = escapeLike(url.searchParams.get("q") ?? "");
+    if (q.length < 2) return NextResponse.json({ results: [] });
+
+    const pattern = `%${q}%`;
+    const { data, error } = await supabase
+      .from("profiles")
+      .select("user_id, username, display_name, first_name, last_name")
+      .or(
+        [
+          `username.ilike.${pattern}`,
+          `display_name.ilike.${pattern}`,
+          `first_name.ilike.${pattern}`,
+          `last_name.ilike.${pattern}`,
+        ].join(","),
+      )
+      .not("username", "is", null)
+      .neq("user_id", user.id)
+      .limit(10)
+      .returns<ProfileRow[]>();
+
+    if (error) {
+      return NextResponse.json(
+        { error: "search_failed", details: error.message },
+        { status: 500 },
+      );
+    }
+
+    const results: FriendSummary[] = (data ?? []).map((p) => ({
+      user_id: p.user_id,
+      username: p.username,
+      display_name: p.display_name,
+      first_name: p.first_name,
+      last_name: p.last_name,
+    }));
+
+    return NextResponse.json({ results });
+  } catch (e) {
+    return serverError(e);
+  }
+}

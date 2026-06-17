@@ -1,6 +1,7 @@
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -8,17 +9,15 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import * as Clipboard from "expo-clipboard";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { sanitizeUsernameInput, validateUsername } from "@explrd/shared";
 import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
 import { useProfile } from "@/lib/ProfileContext";
-import { checkUsernameAvailable, updateProfile } from "@/lib/api";
+import { checkUsernameAvailable, deleteAccount, updateProfile } from "@/lib/api";
+import { signOut } from "@/lib/auth";
 import { colors, gradients, radius, space, type as t, shadow } from "@/lib/theme";
-
-const API_BASE = (process.env.EXPO_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
 
 type AvailState =
   | { kind: "idle" }
@@ -48,7 +47,7 @@ export default function ProfilePanel({ displayName: fallbackName, avatarLabel }:
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   // Keep local fields in sync if the profile loads/changes underneath us.
   useEffect(() => {
@@ -120,14 +119,34 @@ export default function ProfilePanel({ displayName: fallbackName, avatarLabel }:
   }, [session?.access_token, canSave, firstName, lastName, username, setProfile]);
 
   const shareHandle = profile?.username ?? null;
-  const profileLink = shareHandle ? `${API_BASE}/u/${shareHandle}` : null;
 
-  const handleCopy = useCallback(async () => {
-    if (!profileLink) return;
-    await Clipboard.setStringAsync(profileLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
-  }, [profileLink]);
+  const handleDeleteAccount = useCallback(() => {
+    Alert.alert(
+      "Delete Account",
+      "This permanently deletes your account, your saved places, and your friends. This can't be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Delete",
+          style: "destructive",
+          onPress: async () => {
+            if (!session?.access_token) return;
+            setDeleting(true);
+            try {
+              await deleteAccount(session.access_token);
+              await signOut();
+            } catch (e) {
+              setDeleting(false);
+              Alert.alert(
+                "Couldn't delete account",
+                e instanceof Error ? e.message : "Please try again.",
+              );
+            }
+          },
+        },
+      ],
+    );
+  }, [session?.access_token]);
 
   return (
     <ScrollView
@@ -238,29 +257,27 @@ export default function ProfilePanel({ displayName: fallbackName, avatarLabel }:
         )}
       </TouchableOpacity>
 
-      {/* Share handle */}
-      {shareHandle && (
-        <View style={styles.shareCard}>
-          <View style={styles.shareTop}>
-            <Ionicons name="person-add" size={16} color={colors.blue} />
-            <Text style={styles.shareTitle}>Add me on explrd</Text>
-          </View>
-          <Text style={styles.shareHandleText}>@{shareHandle}</Text>
-          <TouchableOpacity style={styles.copyBtn} onPress={handleCopy} activeOpacity={0.8}>
-            <Ionicons
-              name={copied ? "checkmark-circle" : "copy-outline"}
-              size={16}
-              color={copied ? colors.success : colors.blue}
-            />
-            <Text style={[styles.copyBtnText, copied && { color: colors.success }]}>
-              {copied ? "Copied!" : "Copy profile link"}
-            </Text>
-          </TouchableOpacity>
-          <Text style={styles.shareHint}>
-            Friends can add you by searching this username in the Friends tab.
-          </Text>
-        </View>
-      )}
+      {/* Danger zone — delete account */}
+      <View style={styles.dangerZone}>
+        <TouchableOpacity
+          style={styles.deleteBtn}
+          onPress={handleDeleteAccount}
+          disabled={deleting}
+          activeOpacity={0.8}
+        >
+          {deleting ? (
+            <ActivityIndicator color={colors.danger} size="small" />
+          ) : (
+            <>
+              <Ionicons name="trash-outline" size={17} color={colors.danger} />
+              <Text style={styles.deleteBtnText}>Delete Account</Text>
+            </>
+          )}
+        </TouchableOpacity>
+        <Text style={styles.deleteHint}>
+          Permanently removes your account and all of your data.
+        </Text>
+      </View>
     </ScrollView>
   );
 }
@@ -338,35 +355,28 @@ const styles = StyleSheet.create({
   },
   saveBtnText: { color: "#ffffff", fontSize: 15, fontWeight: "700" },
 
-  // Share handle
-  shareCard: {
-    marginTop: space.xl,
-    backgroundColor: colors.blueSoft,
-    borderRadius: radius.md,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: "rgba(0,122,255,0.18)",
+  // Danger zone — delete account
+  dangerZone: {
+    marginTop: space.xxl,
+    paddingTop: space.lg,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.hairline,
   },
-  shareTop: { flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 8 },
-  shareTitle: { fontSize: 13, fontWeight: "700", color: colors.bluePress },
-  shareHandleText: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: colors.blue,
-    letterSpacing: -0.4,
-    marginBottom: 12,
-  },
-  copyBtn: {
+  deleteBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    alignSelf: "flex-start",
-    backgroundColor: "rgba(0,122,255,0.12)",
-    borderRadius: radius.pill,
-    paddingHorizontal: 14,
-    paddingVertical: 7,
-    marginBottom: 8,
+    justifyContent: "center",
+    gap: 7,
+    paddingVertical: 14,
+    borderRadius: radius.md,
+    backgroundColor: colors.dangerSoft,
   },
-  copyBtnText: { fontSize: 13, fontWeight: "600", color: colors.blue },
-  shareHint: { fontSize: 11, color: "#6b8ac4", lineHeight: 16 },
+  deleteBtnText: { fontSize: 15, fontWeight: "700", color: colors.danger },
+  deleteHint: {
+    fontSize: 12,
+    color: colors.faint,
+    marginTop: 8,
+    textAlign: "center",
+    lineHeight: 17,
+  },
 });

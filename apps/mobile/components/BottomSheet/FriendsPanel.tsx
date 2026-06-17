@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -11,7 +11,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
-import { getExplrdStats, sanitizeUsernameInput } from "@explrd/shared";
+import { getExplrdStats } from "@explrd/shared";
 import type {
   SavedPlace,
   ExplrdStats,
@@ -19,7 +19,9 @@ import type {
   FriendRequestSummary,
 } from "@explrd/shared";
 import { SheetScrollContext } from "@/components/Sheet";
+import { useSession } from "@/lib/SessionContext";
 import { useFriends, type FriendMapFilter } from "@/lib/FriendsContext";
+import { searchUsers } from "@/lib/api";
 import { colors } from "@/lib/theme";
 import { gradients } from "@/lib/theme";
 
@@ -86,6 +88,7 @@ type Props = {
 };
 
 export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
+  const { session } = useSession();
   const {
     friends,
     incoming,
@@ -103,33 +106,80 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
     removeFriend,
   } = useFriends();
 
-  const [usernameInput, setUsernameInput] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<FriendSummary[]>([]);
+  const [searching, setSearching] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
   const [addNote, setAddNote] = useState<string | null>(null);
-  const [addBusy, setAddBusy] = useState(false);
+  const [addBusyId, setAddBusyId] = useState<string | null>(null);
   const [busyReq, setBusyReq] = useState<string | null>(null);
+
+  const searchAbortRef = useRef<AbortController | null>(null);
+  const searchDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
 
   const myStats = useMemo(() => getExplrdStats(myPlaces), [myPlaces]);
 
-  const handleAdd = async () => {
-    if (addBusy || !usernameInput.trim()) return;
-    setAddBusy(true);
+  // Relationship lookups so search rows can show "Friends" / "Pending".
+  const friendIds = useMemo(() => new Set(friends.map((f) => f.user_id)), [friends]);
+  const outgoingIds = useMemo(() => new Set(outgoing.map((r) => r.user_id)), [outgoing]);
+
+  // ── Live people search (name or @username) ────────────────────────────────
+  const handleSearchChange = (text: string) => {
+    setSearchQuery(text);
+    setAddError(null);
+    setAddNote(null);
+    if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+    const q = text.trim();
+    if (q.length < 2) {
+      searchAbortRef.current?.abort();
+      setSearchResults([]);
+      setSearching(false);
+      return;
+    }
+    searchDebounceRef.current = setTimeout(async () => {
+      if (!session?.access_token) return;
+      searchAbortRef.current?.abort();
+      searchAbortRef.current = new AbortController();
+      setSearching(true);
+      try {
+        const res = await searchUsers(session.access_token, q, searchAbortRef.current.signal);
+        setSearchResults(res);
+      } catch (e) {
+        if ((e as Error)?.name !== "AbortError") setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+  };
+
+  useEffect(
+    () => () => {
+      if (searchDebounceRef.current) clearTimeout(searchDebounceRef.current);
+      searchAbortRef.current?.abort();
+    },
+    [],
+  );
+
+  const handleAddUser = async (target: FriendSummary) => {
+    if (addBusyId || !target.username) return;
+    setAddBusyId(target.user_id);
     setAddError(null);
     setAddNote(null);
     try {
-      const status = await sendRequest(usernameInput);
-      setUsernameInput("");
+      const status = await sendRequest(target.username);
       setAddNote(
         status === "accepted"
-          ? "You're now friends! 🎉"
-          : "Request sent — waiting on them to accept.",
+          ? `You're now friends with ${firstName(nameOf(target))}! 🎉`
+          : `Request sent to ${firstName(nameOf(target))} — waiting on them to accept.`,
       );
+      setSearchQuery("");
+      setSearchResults([]);
     } catch (e) {
       setAddError(e instanceof Error ? e.message : "Couldn't send request.");
     } finally {
-      setAddBusy(false);
+      setAddBusyId(null);
     }
   };
 
@@ -182,40 +232,94 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
         }
       }}
     >
-      {/* ── Add by username ─────────────────────────────────────────────────── */}
+      {/* ── Find friends by name or @username ───────────────────────────────── */}
       <Text style={styles.sectionLabel}>ADD A FRIEND</Text>
-      <View style={styles.addRow}>
-        <View style={styles.addInputWrap}>
-          <Text style={styles.addAt}>@</Text>
-          <TextInput
-            style={styles.addInput}
-            placeholder="username"
-            placeholderTextColor={colors.faint}
-            autoCapitalize="none"
-            autoCorrect={false}
-            value={usernameInput}
-            onChangeText={(v) => {
-              setUsernameInput(sanitizeUsernameInput(v));
-              setAddError(null);
-              setAddNote(null);
-            }}
-            onSubmitEditing={handleAdd}
-            returnKeyType="send"
-          />
-        </View>
-        <TouchableOpacity
-          style={[styles.addBtn, (addBusy || !usernameInput.trim()) && { opacity: 0.5 }]}
-          onPress={handleAdd}
-          disabled={addBusy || !usernameInput.trim()}
-          activeOpacity={0.8}
-        >
-          {addBusy ? (
-            <ActivityIndicator color="#ffffff" size="small" />
-          ) : (
-            <Text style={styles.addBtnText}>Send</Text>
-          )}
-        </TouchableOpacity>
+      <View style={styles.searchWrap}>
+        <Ionicons name="search" size={17} color={colors.muted} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by name or @username"
+          placeholderTextColor={colors.faint}
+          autoCapitalize="none"
+          autoCorrect={false}
+          value={searchQuery}
+          onChangeText={handleSearchChange}
+          returnKeyType="search"
+        />
+        {searching ? (
+          <ActivityIndicator color={colors.muted} size="small" />
+        ) : searchQuery.length > 0 ? (
+          <TouchableOpacity
+            onPress={() => handleSearchChange("")}
+            hitSlop={8}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="close-circle" size={18} color={colors.faint} />
+          </TouchableOpacity>
+        ) : null}
       </View>
+
+      {/* Search results dropdown */}
+      {searchQuery.trim().length >= 2 && (
+        <View style={styles.searchResults}>
+          {searchResults.length === 0 && !searching ? (
+            <Text style={styles.searchEmpty}>No one found by that name.</Text>
+          ) : (
+            searchResults.map((u) => {
+              const isFriend = friendIds.has(u.user_id);
+              const isPending = outgoingIds.has(u.user_id);
+              const busy = addBusyId === u.user_id;
+              return (
+                <View key={u.user_id} style={styles.resultRow}>
+                  <LinearGradient
+                    colors={gradientFor(u.user_id)}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 1 }}
+                    style={styles.resultAvatar}
+                  >
+                    <Text style={styles.resultAvatarText}>{initialsOf(nameOf(u))}</Text>
+                  </LinearGradient>
+                  <View style={styles.resultMid}>
+                    <Text style={styles.resultName} numberOfLines={1}>
+                      {nameOf(u)}
+                    </Text>
+                    {u.username && (
+                      <Text style={styles.resultHandle} numberOfLines={1}>
+                        @{u.username}
+                      </Text>
+                    )}
+                  </View>
+                  {isFriend ? (
+                    <View style={styles.resultTag}>
+                      <Ionicons name="checkmark" size={14} color={colors.success} />
+                      <Text style={[styles.resultTagText, { color: colors.success }]}>
+                        Friends
+                      </Text>
+                    </View>
+                  ) : isPending ? (
+                    <View style={styles.resultTag}>
+                      <Text style={styles.resultTagText}>Pending</Text>
+                    </View>
+                  ) : (
+                    <TouchableOpacity
+                      style={styles.resultAddBtn}
+                      onPress={() => handleAddUser(u)}
+                      disabled={busy}
+                      activeOpacity={0.8}
+                    >
+                      {busy ? (
+                        <ActivityIndicator color="#ffffff" size="small" />
+                      ) : (
+                        <Text style={styles.resultAddText}>Add</Text>
+                      )}
+                    </TouchableOpacity>
+                  )}
+                </View>
+              );
+            })
+          )}
+        </View>
+      )}
       {addError && <Text style={styles.addError}>{addError}</Text>}
       {addNote && <Text style={styles.addNote}>{addNote}</Text>}
 
@@ -390,16 +494,28 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
       )}
 
       {selectedFriend && selectedData && (
-        <FriendDetail
-          friendName={selectedData.displayName}
-          friendPlaces={selectedData.places}
-          friendStats={selectedData.stats}
-          myName={myDisplayName}
-          myPlaces={myPlaces}
-          myStats={myStats}
-          mapFilter={mapFilter}
-          setMapFilter={setMapFilter}
-        />
+        <>
+          <FriendDetail
+            friendName={selectedData.displayName}
+            friendPlaces={selectedData.places}
+            friendStats={selectedData.stats}
+            myName={myDisplayName}
+            myPlaces={myPlaces}
+            myStats={myStats}
+            mapFilter={mapFilter}
+            setMapFilter={setMapFilter}
+          />
+          <TouchableOpacity
+            style={styles.removeFriendBtn}
+            onPress={() => confirmRemove(selectedFriend)}
+            activeOpacity={0.8}
+          >
+            <Ionicons name="person-remove-outline" size={17} color={colors.danger} />
+            <Text style={styles.removeFriendText}>
+              Remove {firstName(nameOf(selectedFriend))}
+            </Text>
+          </TouchableOpacity>
+        </>
       )}
     </ScrollView>
   );
@@ -657,36 +773,74 @@ function FactCard({
 const styles = StyleSheet.create({
   container: { padding: 16, paddingBottom: 100 },
 
-  // Add by username
-  addRow: { flexDirection: "row", gap: 8, marginBottom: 4 },
-  addInputWrap: {
-    flex: 1,
+  // Find friends — search field + results dropdown
+  searchWrap: {
     flexDirection: "row",
     alignItems: "center",
+    gap: 8,
     backgroundColor: colors.fill,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.hairline,
     paddingHorizontal: 14,
   },
-  addAt: { fontSize: 15, fontWeight: "700", color: colors.muted, marginRight: 2 },
-  addInput: {
+  searchInput: {
     flex: 1,
     paddingVertical: 11,
     fontSize: 15,
     color: colors.ink,
   },
-  addBtn: {
-    backgroundColor: colors.blue,
-    borderRadius: 12,
-    paddingHorizontal: 20,
+  searchResults: { marginTop: 8 },
+  searchEmpty: {
+    fontSize: 13,
+    color: colors.muted,
+    paddingVertical: 12,
+    textAlign: "center",
+  },
+  resultRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    paddingVertical: 8,
+    gap: 12,
+  },
+  resultAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
     alignItems: "center",
     justifyContent: "center",
-    minWidth: 72,
   },
-  addBtnText: { color: "#ffffff", fontSize: 14, fontWeight: "700" },
+  resultAvatarText: { fontSize: 14, fontWeight: "700", color: "#ffffff" },
+  resultMid: { flex: 1 },
+  resultName: { fontSize: 15, fontWeight: "700", color: colors.ink },
+  resultHandle: { fontSize: 12, color: colors.muted, marginTop: 1 },
+  resultAddBtn: {
+    backgroundColor: colors.blue,
+    borderRadius: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    minWidth: 60,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  resultAddText: { color: "#ffffff", fontSize: 13, fontWeight: "700" },
+  resultTag: { flexDirection: "row", alignItems: "center", gap: 4 },
+  resultTagText: { fontSize: 12, fontWeight: "600", color: colors.muted },
   addError: { marginTop: 8, fontSize: 12, color: colors.danger },
   addNote: { marginTop: 8, fontSize: 12, color: colors.success, fontWeight: "500" },
+
+  // Remove friend
+  removeFriendBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 7,
+    marginTop: 8,
+    paddingVertical: 13,
+    borderRadius: 14,
+    backgroundColor: colors.dangerSoft,
+  },
+  removeFriendText: { fontSize: 15, fontWeight: "700", color: colors.danger },
 
   // Requests
   requestsBlock: { marginTop: 20 },

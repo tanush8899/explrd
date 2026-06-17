@@ -48,6 +48,7 @@ export default function AddPlacePanel({
 
   const abortRef = useRef<AbortController | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inputRef = useRef<TextInput>(null);
   const [kbHeight, setKbHeight] = useState(0);
 
   useEffect(() => {
@@ -129,11 +130,13 @@ export default function AddPlacePanel({
         country_boundary: null,
         continent_boundary: null,
       } satisfies SavedPlace);
-      // Hand control to the parent — it plays the stamp and navigates to My Places.
-      // (No snap/deselect here; that used to fight the parent's transition.)
+      // Hand control to the parent — it plays the stamp and keeps us in the add
+      // flow so the next city can be added immediately. Reset to a clean search
+      // and refocus so the user can just keep typing.
       setSelected(null);
       setQuery("");
       setResults([]);
+      setTimeout(() => inputRef.current?.focus(), 250);
     } catch (e: unknown) {
       setError((e as Error)?.message ?? "Failed to save. Try again.");
     } finally {
@@ -238,13 +241,14 @@ export default function AddPlacePanel({
         }
       }}
     >
-      <Text style={styles.subtitle}>Enter a city, landmark, or country</Text>
+      <Text style={styles.subtitle}>Search a city or landmark — only cities can be added</Text>
 
       {/* Search input — Flighty's flat grey capsule field */}
       <View style={styles.inputRow}>
         <TextInput
+          ref={inputRef}
           style={styles.input}
-          placeholder="Tokyo, Eiffel Tower, or Brazil"
+          placeholder="e.g. Tokyo, Paris, or Big Ben"
           placeholderTextColor="#9aa0a6"
           value={query}
           onChangeText={handleSearch}
@@ -308,8 +312,8 @@ export default function AddPlacePanel({
       {!searching && query.length > 2 && results.length === 0 && (
         <View style={styles.emptyState}>
           <Ionicons name="search" size={26} color="#c6c9ce" />
-          <Text style={styles.emptyTitle}>No Results</Text>
-          <Text style={styles.emptyDesc}>Try a city, landmark, or country name</Text>
+          <Text style={styles.emptyTitle}>No Cities Found</Text>
+          <Text style={styles.emptyDesc}>Try a city or a famous landmark</Text>
         </View>
       )}
     </ScrollView>

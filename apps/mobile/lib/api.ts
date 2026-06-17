@@ -3,6 +3,7 @@ import type {
   ExplrdStats,
   UserProfile,
   FriendsPayload,
+  FriendSummary,
 } from "@explrd/shared";
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -163,12 +164,17 @@ export async function appleMapsGeocode(q: string, signal?: AbortSignal): Promise
 
   for (const place of data.results ?? []) {
     const addr = place.structuredAddress;
-    const city = addr?.locality || place.name;
+    // Cities only: require a real locality. This drops country/state/region
+    // results (e.g. searching "Japan" or "Kerala") while still resolving
+    // landmarks like "Big Ben" up to their parent city ("London").
+    const city = addr?.locality;
     const state = addr?.administrativeArea;
     const country = place.country;       // top-level field
     const countryCode = place.countryCode; // top-level field
 
     if (!city || !country) continue;
+    // Guard against a country/state echoed back as its own locality.
+    if (city.toLowerCase() === country.toLowerCase()) continue;
 
     const key = `${city.toLowerCase()}|${country.toLowerCase()}`;
     if (seen.has(key)) continue;
@@ -183,6 +189,7 @@ export async function appleMapsGeocode(q: string, signal?: AbortSignal): Promise
       type: "city",
       class: "place",
       addresstype: "city",
+      landmark_name: null,
     });
   }
   return out;
@@ -260,6 +267,7 @@ export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise
       type: isStrictCity ? (r.type ?? null) : "city",
       class: isStrictCity ? (r.class ?? null) : "place",
       addresstype: isStrictCity ? (r.addresstype ?? null) : "city",
+      landmark_name: null,
     });
   }
   return out;
@@ -529,6 +537,35 @@ export async function removeFriend(
   if (!res.ok) {
     const err = await res.json().catch(() => ({})) as Record<string, string>;
     throw new Error(err.details ?? err.error ?? `removeFriend: ${res.status}`);
+  }
+}
+
+/** GET /api/friends/search?q= — find people by name or @username. */
+export async function searchUsers(
+  accessToken: string,
+  q: string,
+  signal?: AbortSignal,
+): Promise<FriendSummary[]> {
+  const res = await fetch(
+    `${API_BASE}/api/friends/search?q=${encodeURIComponent(q)}`,
+    { headers: authHeaders(accessToken), signal },
+  );
+  if (!res.ok) throw new Error(`searchUsers: ${res.status}`);
+  const data = (await res.json()) as { results?: FriendSummary[] };
+  return data.results ?? [];
+}
+
+// ─── Account ─────────────────────────────────────────────────────────────────
+
+/** DELETE /api/account — permanently delete the signed-in user and all their data. */
+export async function deleteAccount(accessToken: string): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/account`, {
+    method: "DELETE",
+    headers: authHeaders(accessToken),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.details ?? err.error ?? `deleteAccount: ${res.status}`);
   }
 }
 
