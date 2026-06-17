@@ -279,10 +279,16 @@ const Sheet = forwardRef<SheetHandle, Props>(function Sheet(
   const pillStyle = useAnimatedStyle(() => ({
     opacity: interpolate(progress.value, [0, 0.3], [1, 0], Extrapolation.CLAMP),
   }));
+  // Header + content fade out across [0.4, 0.85]: fully gone well before the card
+  // reaches pill height, so rows below the pill never peek through, and only the
+  // opaque card background shows in the gap before the pill fades in.
   const fullStyle = useAnimatedStyle(() => ({
-    opacity: interpolate(progress.value, [0, 0.45], [0, 1], Extrapolation.CLAMP),
+    opacity: interpolate(progress.value, [0.4, 0.85], [0, 1], Extrapolation.CLAMP),
   }));
   const footerStyle = useAnimatedStyle(() => ({
+    // Fade in lockstep with the content so the nav pill never lands squished on
+    // top of the search pill at the end of a collapse.
+    opacity: interpolate(progress.value, [0.4, 0.85], [0, 1], Extrapolation.CLAMP),
     paddingBottom: interpolate(
       progress.value,
       [0, 1, 2],
