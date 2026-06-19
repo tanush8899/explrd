@@ -2,7 +2,7 @@ const IS_DEV = process.env.APP_VARIANT === "development";
 
 /** @type {import('expo/config').ExpoConfig} */
 const config = {
-  name: IS_DEV ? "Explr (Dev)" : "Explr",
+  name: IS_DEV ? "explrd (Dev)" : "explrd",
   slug: "explrd",
   version: "1.0.0",
   orientation: "portrait",
@@ -13,9 +13,10 @@ const config = {
     supportsTablet: false,
     bundleIdentifier: IS_DEV ? "com.explrd.app.dev" : "com.explrd.app",
     infoPlist: {
-      NSPhotoLibraryAddUsageDescription: "Explr saves your passport card to Photos.",
-      NSPhotoLibraryUsageDescription: "Explr saves your passport card to Photos.",
-      NSLocationWhenInUseUsageDescription: "Explr shows your saved places on the map.",
+      NSPhotoLibraryAddUsageDescription: "explrd saves your passport card to Photos.",
+      NSPhotoLibraryUsageDescription:
+        "explrd reads the location saved in your photos to map the cities you've visited, and saves your passport card to Photos. Your photos never leave your device.",
+      NSLocationWhenInUseUsageDescription: "explrd shows your saved places on the map.",
       ITSAppUsesNonExemptEncryption: false,
     },
   },
@@ -47,7 +48,8 @@ const config = {
     [
       "expo-media-library",
       {
-        photosPermission: "Explr saves your passport card to your photo library.",
+        photosPermission:
+          "explrd reads the location saved in your photos to map the cities you've visited. Your photos never leave your device.",
       },
     ],
     "expo-image",

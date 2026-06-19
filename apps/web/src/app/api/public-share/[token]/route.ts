@@ -20,7 +20,7 @@ function isMissingNormalizedColumn(msg: string | undefined) {
   return typeof msg === "string" && (msg.includes("normalized_") || msg.includes("_boundary")) && (msg.includes("does not exist") || msg.includes("schema cache"));
 }
 
-export async function GET(_: Request, context: RouteContext) {
+export async function GET(req: Request, context: RouteContext) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -60,10 +60,17 @@ export async function GET(_: Request, context: RouteContext) {
       authUser?.email?.split("@")[0] ||
       "Explr Traveler";
 
+    // The mobile share screen shows only stats + name (no map), so it requests
+    // ?boundaries=none and we skip every polygon column entirely.
+    const lite = new URL(req.url).searchParams.get("boundaries") === "none";
+    const boundaryCols = lite
+      ? ""
+      : `, city_boundary, state_boundary, country_boundary, continent_boundary`;
+
     // Fetch places
     let { data, error } = await supabase
       .from("user_places")
-      .select(`place_id, places_cache!inner (place_id, name, city, state, country, continent, normalized_city, normalized_state, normalized_country, normalized_continent, lat, lng, formatted, city_boundary, state_boundary, country_boundary, continent_boundary)`)
+      .select(`place_id, places_cache!inner (place_id, name, city, state, country, continent, normalized_city, normalized_state, normalized_country, normalized_continent, lat, lng, formatted${boundaryCols})`)
       .eq("user_id", payload.uid);
 
     if (error && isMissingNormalizedColumn(error.message)) {
@@ -79,20 +86,31 @@ export async function GET(_: Request, context: RouteContext) {
       return NextResponse.json({ error: "places_query_failed", details: error.message }, { status: 500 });
     }
 
-    const places = await Promise.all(
-      ((data ?? []) as JoinedRow[])
-        .map((row) => (Array.isArray(row.places_cache) ? row.places_cache[0] ?? null : row.places_cache))
-        .filter(Boolean)
-        .map((place) => ("normalized_city" in (place as object) ? place as SavedPlace : withMissingNormalized(place as LegacySavedPlace)))
-        .map((place) => ({
+    const rows = ((data ?? []) as JoinedRow[])
+      .map((row) => (Array.isArray(row.places_cache) ? row.places_cache[0] ?? null : row.places_cache))
+      .filter(Boolean)
+      .map((place) => ("normalized_city" in (place as object) ? place as SavedPlace : withMissingNormalized(place as LegacySavedPlace)));
+
+    // Stats are derived from place names, not polygons, so lite needs no boundaries.
+    const places = lite
+      ? rows.map((place) => ({
           ...place,
-          city_boundary: parseBoundary(place.city_boundary),
-          state_boundary: parseBoundary(place.state_boundary),
-          country_boundary: parseBoundary(place.country_boundary),
-          continent_boundary: parseBoundary(place.continent_boundary),
+          city_boundary: null,
+          state_boundary: null,
+          country_boundary: null,
+          continent_boundary: null,
         }))
-        .map((place) => hydratePlaceBoundaries(place))
-    );
+      : await Promise.all(
+          rows
+            .map((place) => ({
+              ...place,
+              city_boundary: parseBoundary(place.city_boundary),
+              state_boundary: parseBoundary(place.state_boundary),
+              country_boundary: parseBoundary(place.country_boundary),
+              continent_boundary: parseBoundary(place.continent_boundary),
+            }))
+            .map((place) => hydratePlaceBoundaries(place))
+        );
 
     const expiresAt = new Date(payload.exp * 1000).toISOString();
 

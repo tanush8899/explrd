@@ -35,7 +35,7 @@ export default function BottomNav({ activeTab, onTabPress, onAdd, friendsBadge =
   return (
     <View style={styles.row}>
       {/* Liquid-glass tab pill — Flighty's floating bottom bar */}
-      <GlassSurface style={styles.container} interactive>
+      <GlassSurface style={styles.container} interactive transparent>
         <View style={styles.tabs}>
           {TABS.map((tab) => {
             const isActive = activeTab === tab.key;
@@ -72,7 +72,7 @@ export default function BottomNav({ activeTab, onTabPress, onAdd, friendsBadge =
       </GlassSurface>
 
       {/* Circular search button — like Flighty's detached magnifier */}
-      <GlassSurface style={styles.addBtn} interactive>
+      <GlassSurface style={styles.addBtn} interactive transparent>
         <TouchableOpacity
           style={styles.addTouch}
           onPress={() => {

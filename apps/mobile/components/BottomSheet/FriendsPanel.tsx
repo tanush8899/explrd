@@ -549,6 +549,7 @@ function FriendDetail({
         .map((p) => p.country)
         .filter((c): c is string => !!c && myCountries.has(c.toLowerCase())),
     );
+    const friendOnly = friendPlaces.filter((p) => !myKeys.has(cityCountryKey(p)));
     return {
       lastPlace: friendPlaces[0] ?? null,
       myLastPlace: myPlaces[0] ?? null,
@@ -556,7 +557,8 @@ function FriendDetail({
       myTopCountry: topCountry(myPlaces),
       sharedPlaces: shared,
       sharedCountries: [...sharedCountries],
-      friendOnlyCount: friendPlaces.filter((p) => !myKeys.has(cityCountryKey(p))).length,
+      friendOnly,
+      friendOnlyCount: friendOnly.length,
     };
   }, [friendPlaces, myPlaces]);
 
@@ -583,9 +585,9 @@ function FriendDetail({
         />
       </View>
       <View style={styles.legendRow}>
-        {mapFilter === "both" && <LegendDot color={colors.ink} label="You" />}
-        <LegendDot color={colors.blue} label={friendFirst} />
-        {mapFilter === "both" && <LegendDot color="#8b5cf6" label="Both of you" />}
+        {mapFilter === "both" && <LegendDot color={colors.blue} label="You" />}
+        <LegendDot color={colors.orange} label={friendFirst} />
+        {mapFilter === "both" && <LegendDot color={colors.purple} label="Both of you" />}
       </View>
 
       {/* VS card */}
@@ -661,8 +663,9 @@ function FriendDetail({
         sub={
           fun.sharedPlaces.length === 0
             ? `You and ${friendFirst} have explored completely different corners of the world.`
-            : fun.sharedPlaces.slice(0, 5).map(placeLabel).join(" • ")
+            : undefined
         }
+        items={fun.sharedPlaces.map(placeLabel)}
       />
 
       {fun.sharedCountries.length > 0 && (
@@ -670,7 +673,7 @@ function FriendDetail({
           icon="earth"
           title="Countries you've both touched"
           big={`${fun.sharedCountries.length} ${fun.sharedCountries.length === 1 ? "country" : "countries"}`}
-          sub={fun.sharedCountries.slice(0, 6).join(" • ")}
+          items={fun.sharedCountries}
         />
       )}
 
@@ -679,9 +682,10 @@ function FriendDetail({
           icon="bulb"
           title="Trip inspiration"
           big={`${fun.friendOnlyCount} new ${fun.friendOnlyCount === 1 ? "idea" : "ideas"}`}
-          sub={`${friendFirst} has been to ${fun.friendOnlyCount} ${
-            fun.friendOnlyCount === 1 ? "place" : "places"
+          sub={`${friendFirst} has been ${
+            fun.friendOnlyCount === 1 ? "somewhere" : "places"
           } you haven't — ask them where to go next!`}
+          items={fun.friendOnly.map(placeLabel)}
         />
       )}
     </View>
@@ -737,17 +741,28 @@ function VsBar({ label, mine, theirs }: { label: string; mine: number; theirs: n
   );
 }
 
+const FACT_PREVIEW = 5;
+
 function FactCard({
   icon,
   title,
   big,
   sub,
+  items,
 }: {
   icon: React.ComponentProps<typeof Ionicons>["name"];
   title: string;
   big: string;
   sub?: string;
+  /** Optional list shown beneath the headline; collapses to a preview with a
+   *  "Show all" toggle when it has more than FACT_PREVIEW entries. */
+  items?: string[];
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const list = items ?? [];
+  const canExpand = list.length > FACT_PREVIEW;
+  const shown = expanded || !canExpand ? list : list.slice(0, FACT_PREVIEW);
+
   return (
     <View style={styles.factCard}>
       <View style={styles.factIconWrap}>
@@ -757,6 +772,23 @@ function FactCard({
         <Text style={styles.factTitle}>{title}</Text>
         <Text style={styles.factBig} numberOfLines={2}>{big}</Text>
         {sub ? <Text style={styles.factSub} numberOfLines={3}>{sub}</Text> : null}
+        {list.length > 0 ? (
+          <Text style={styles.factSub}>{shown.join(" • ")}</Text>
+        ) : null}
+        {canExpand ? (
+          <TouchableOpacity
+            onPress={() => {
+              hapticSelection();
+              setExpanded((v) => !v);
+            }}
+            activeOpacity={0.7}
+            hitSlop={6}
+          >
+            <Text style={styles.factToggle}>
+              {expanded ? "Show less" : `Show all ${list.length}`}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
@@ -765,7 +797,7 @@ function FactCard({
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 100 },
+  container: { padding: 16, paddingBottom: 120 },
 
   // Find friends — search field + results dropdown
   searchWrap: {
@@ -1058,4 +1090,10 @@ const styles = StyleSheet.create({
   },
   factBig: { fontSize: 16, fontWeight: "700", color: colors.ink },
   factSub: { fontSize: 12, color: colors.muted, marginTop: 3, lineHeight: 17 },
+  factToggle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: colors.blue,
+    marginTop: 6,
+  },
 });

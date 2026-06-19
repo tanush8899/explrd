@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hydratePlaceBoundaries, parseBoundary } from "@/lib/place-boundaries";
+import { getStaticCountryFeatureCollection } from "@/lib/static-boundaries";
 import { getExplrdStats } from "@/lib/stats";
 import type { SavedPlace, UserProfile } from "@/lib/types";
 
@@ -54,7 +55,7 @@ function isSavedPlaceLike(value: SavedPlace | LegacySavedPlace | null): value is
   return Boolean(value);
 }
 
-export async function GET(_: Request, context: RouteContext) {
+export async function GET(req: Request, context: RouteContext) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
     const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -113,6 +114,18 @@ export async function GET(_: Request, context: RouteContext) {
       );
     }
 
+    // Mobile (the friend globe) only renders country outlines, so it requests
+    // ?boundaries=country to skip the heavy city/state/continent polygons.
+    const lite = new URL(req.url).searchParams.get("boundaries") === "country";
+
+    const boundaryCols = lite
+      ? ""
+      : `,
+          city_boundary,
+          state_boundary,
+          country_boundary,
+          continent_boundary`;
+
     let { data, error } = await supabase
       .from("user_places")
       .select(
@@ -131,11 +144,7 @@ export async function GET(_: Request, context: RouteContext) {
           normalized_continent,
           lat,
           lng,
-          formatted,
-          city_boundary,
-          state_boundary,
-          country_boundary,
-          continent_boundary
+          formatted${boundaryCols}
         )
       `
       )
@@ -173,24 +182,36 @@ export async function GET(_: Request, context: RouteContext) {
       );
     }
 
-    const places = await Promise.all(
-      ((data ?? []) as JoinedSavedPlaceRow[])
+    const rows = ((data ?? []) as JoinedSavedPlaceRow[])
       .map((row) =>
         Array.isArray(row.places_cache) ? row.places_cache[0] ?? null : row.places_cache
       )
       .filter(isSavedPlaceLike)
       .map((place) =>
         "normalized_city" in place ? place : withMissingNormalizedFields(place)
-      )
-      .map((place) => ({
-        ...place,
-        city_boundary: parseBoundary(place.city_boundary),
-        state_boundary: parseBoundary(place.state_boundary),
-        country_boundary: parseBoundary(place.country_boundary),
-        continent_boundary: parseBoundary(place.continent_boundary),
-      }))
-      .map((place) => hydratePlaceBoundaries(place))
-    );
+      );
+
+    const places = lite
+      ? rows.map((place) => ({
+          ...place,
+          city_boundary: null,
+          state_boundary: null,
+          country_boundary: getStaticCountryFeatureCollection(
+            place.normalized_country ?? place.country
+          ),
+          continent_boundary: null,
+        }))
+      : await Promise.all(
+          rows
+            .map((place) => ({
+              ...place,
+              city_boundary: parseBoundary(place.city_boundary),
+              state_boundary: parseBoundary(place.state_boundary),
+              country_boundary: parseBoundary(place.country_boundary),
+              continent_boundary: parseBoundary(place.continent_boundary),
+            }))
+            .map((place) => hydratePlaceBoundaries(place))
+        );
 
     return NextResponse.json({
       profile,

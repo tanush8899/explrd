@@ -1,4 +1,4 @@
-import React, { useCallback, useContext, useEffect, useRef, useState } from "react";
+import React, { useCallback, useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   View,
   Text,
@@ -14,11 +14,30 @@ import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
 import { hapticSelection, hapticSuccess, hapticError } from "@/lib/haptics";
 import { STAMP_TOTAL_MS } from "@/components/PassportStamp";
-import { searchPlaces, savePin, type GeoResult } from "@/lib/api";
+import { searchPlaces, savePin, canonicalCity, type GeoResult } from "@/lib/api";
 import type { SavedPlace } from "@explrd/shared";
 import { colors } from "@/lib/theme";
 
 const BLUE = colors.blue;
+
+// City+country key so a search result can be matched against the passport even
+// when the saved record came from a different provider (Apple / Geoapify / photo
+// import all mint different place_ids for the same city).
+function savedKeyOfPlace(p: SavedPlace): string {
+  const nameParts = p.name?.split(",").map((s) => s.trim()) ?? [];
+  const city = canonicalCity(p.normalized_city ?? p.city ?? nameParts[0] ?? "").toLowerCase().trim();
+  const country = (
+    p.normalized_country ?? p.country ?? (nameParts.length > 1 ? nameParts[nameParts.length - 1] : "")
+  ).toLowerCase().trim();
+  return `${city}|${country}`;
+}
+
+function savedKeyOfResult(r: GeoResult): string {
+  const city = canonicalCity((r.address.city as string | undefined) ?? r.display_name.split(",")[0])
+    .toLowerCase().trim();
+  const country = ((r.address.country as string | undefined) ?? "").toLowerCase().trim();
+  return `${city}|${country}`;
+}
 
 type Props = {
   places: SavedPlace[];
@@ -159,18 +178,43 @@ export default function AddPlacePanel({
 
   const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
 
+  // Already-saved lookups: match by place_id (same provider re-search) or by
+  // canonical city+country key (cross-provider / server-normalised records, and
+  // aliases like "Greater London" vs "London"). Resolve to the real SavedPlace
+  // so removal targets the record the user actually logged.
+  const savedById = useMemo(
+    () => new Map(places.map((p) => [p.place_id, p] as const)),
+    [places],
+  );
+  const savedByKey = useMemo(() => {
+    const m = new Map<string, SavedPlace>();
+    for (const p of places) {
+      const k = savedKeyOfPlace(p);
+      if (k !== "|") m.set(k, p);
+    }
+    return m;
+  }, [places]);
+  const matchSaved = useCallback(
+    (r: GeoResult): SavedPlace | undefined =>
+      savedById.get(r.place_id) ?? savedByKey.get(savedKeyOfResult(r)),
+    [savedById, savedByKey],
+  );
+  const isResultSaved = useCallback((r: GeoResult) => !!matchSaved(r), [matchSaved]);
+
   // ── Place card (shown after selecting a result) ───────────────────────────
   if (selected) {
     const parts = selected.display_name.split(",");
     const primaryName = parts[0].trim();
     const locationDetail = parts.slice(1).join(",").trim();
-    const alreadySaved = places.some((p) => p.place_id === selected.place_id);
+    const matchedSaved = matchSaved(selected);
+    const alreadySaved = !!matchedSaved;
 
     const handleRemove = async () => {
+      if (!matchedSaved) return;
       setDeleting(true);
       setError(null);
       try {
-        await onDelete(selected.place_id);
+        await onDelete(matchedSaved.place_id);
       } catch (e: unknown) {
         setError((e as Error)?.message ?? "Failed to remove. Try again.");
       } finally {
@@ -286,6 +330,7 @@ export default function AddPlacePanel({
             const parts = item.display_name.split(",");
             const primary = parts[0].trim();
             const secondary = parts.slice(1).join(",").trim();
+            const logged = isResultSaved(item);
             return (
               <TouchableOpacity
                 key={item.place_id}
@@ -293,8 +338,12 @@ export default function AddPlacePanel({
                 style={styles.resultRow}
                 activeOpacity={0.6}
               >
-                <View style={styles.resultIconCircle}>
-                  <Ionicons name="location-sharp" size={16} color={BLUE} />
+                <View style={[styles.resultIconCircle, logged && styles.resultIconCircleLogged]}>
+                  <Ionicons
+                    name={logged ? "checkmark-sharp" : "location-sharp"}
+                    size={16}
+                    color={logged ? colors.success : BLUE}
+                  />
                 </View>
                 <View style={styles.resultText}>
                   <Text style={styles.resultPrimary} numberOfLines={1}>{primary}</Text>
@@ -307,7 +356,11 @@ export default function AddPlacePanel({
                     </Text>
                   ) : null}
                 </View>
-                <Ionicons name="chevron-forward" size={15} color="#c6c9ce" />
+                {logged ? (
+                  <Text style={styles.resultLogged}>Logged</Text>
+                ) : (
+                  <Ionicons name="chevron-forward" size={15} color="#c6c9ce" />
+                )}
               </TouchableOpacity>
             );
           })}
@@ -393,6 +446,14 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+  },
+  resultIconCircleLogged: {
+    backgroundColor: "rgba(52,199,89,0.12)",
+  },
+  resultLogged: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: colors.success,
   },
   resultText: {
     flex: 1,

@@ -449,7 +449,7 @@ function FactRow({ icon, iconColor, title, value, sub }: {
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
-  container: { padding: 16, paddingBottom: 100 },
+  container: { padding: 16, paddingBottom: 120 },
 
   // Passport card + share overlay
   cardWrapper: {

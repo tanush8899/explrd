@@ -16,7 +16,8 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://nkohsunxlnooveqpnjby.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_xQ1-0eY0vNKo429UQ0LA3w_RB-KVkxt",
-        "EXPO_PUBLIC_API_BASE_URL": "https://explrd.vercel.app/"
+        "EXPO_PUBLIC_API_BASE_URL": "https://explrd.vercel.app/",
+        "EXPO_PUBLIC_APPLE_MAPS_TOKEN": "eyJhbGciOiJFUzI1NiIsImtpZCI6IktONjIySjVCTEQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJNSjlYOTNSVkgzIiwiaWF0IjoxNzgwOTY2Nzk5LCJleHAiOjE3ODM1NTg3OTl9.DTUp4ArSfNOXiHQ9lB0BobDZpJQPTiBJnsccBc7NevoCu0RXdbyPvIifh2NkfqLYZTStRmzu6-Vq_3xa2-P0wg"
       }
     },
     "production": {
@@ -24,7 +25,8 @@
       "env": {
         "EXPO_PUBLIC_SUPABASE_URL": "https://nkohsunxlnooveqpnjby.supabase.co",
         "EXPO_PUBLIC_SUPABASE_ANON_KEY": "sb_publishable_xQ1-0eY0vNKo429UQ0LA3w_RB-KVkxt",
-        "EXPO_PUBLIC_API_BASE_URL": "https://explrd.vercel.app/"
+        "EXPO_PUBLIC_API_BASE_URL": "https://explrd.vercel.app/",
+        "EXPO_PUBLIC_APPLE_MAPS_TOKEN": "eyJhbGciOiJFUzI1NiIsImtpZCI6IktONjIySjVCTEQiLCJ0eXAiOiJKV1QifQ.eyJpc3MiOiJNSjlYOTNSVkgzIiwiaWF0IjoxNzgwOTY2Nzk5LCJleHAiOjE3ODM1NTg3OTl9.DTUp4ArSfNOXiHQ9lB0BobDZpJQPTiBJnsccBc7NevoCu0RXdbyPvIifh2NkfqLYZTStRmzu6-Vq_3xa2-P0wg"
       }
     }
   },

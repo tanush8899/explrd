@@ -29,6 +29,16 @@ export type GeoResult = {
   landmark_name: string | null;
 };
 
+/**
+ * Collapse metropolitan-county aliases to their core city so providers that
+ * disagree line up as one place — e.g. Apple returns "London" while Geoapify and
+ * Nominatim return "Greater London". Leaves distinct places like "City of London"
+ * untouched.
+ */
+export function canonicalCity(city: string): string {
+  return city.replace(/^greater\s+/i, "").trim();
+}
+
 /** GET /api/geocode?q= — no auth required */
 export async function geocode(
   q: string,
@@ -45,11 +55,12 @@ export async function geocode(
 
 // ─── Places ──────────────────────────────────────────────────────────────────
 
-/** GET /api/my-places */
+/** GET /api/my-places — `boundaries=country` returns only the country outline
+ *  the map uses, skipping the heavy (and unused) city/state/continent polygons. */
 export async function fetchMyPlaces(
   accessToken: string
 ): Promise<SavedPlace[]> {
-  const res = await fetch(`${API_BASE}/api/my-places`, {
+  const res = await fetch(`${API_BASE}/api/my-places?boundaries=country`, {
     headers: authHeaders(accessToken),
   });
   if (!res.ok) throw new Error(`fetchMyPlaces: ${res.status}`);
@@ -167,14 +178,15 @@ export async function appleMapsGeocode(q: string, signal?: AbortSignal): Promise
     // Cities only: require a real locality. This drops country/state/region
     // results (e.g. searching "Japan" or "Kerala") while still resolving
     // landmarks like "Big Ben" up to their parent city ("London").
-    const city = addr?.locality;
+    const rawCity = addr?.locality;
     const state = addr?.administrativeArea;
     const country = place.country;       // top-level field
     const countryCode = place.countryCode; // top-level field
 
-    if (!city || !country) continue;
+    if (!rawCity || !country) continue;
     // Guard against a country/state echoed back as its own locality.
-    if (city.toLowerCase() === country.toLowerCase()) continue;
+    if (rawCity.toLowerCase() === country.toLowerCase()) continue;
+    const city = canonicalCity(rawCity);
 
     const key = `${city.toLowerCase()}|${country.toLowerCase()}`;
     if (seen.has(key)) continue;
@@ -193,6 +205,134 @@ export async function appleMapsGeocode(q: string, signal?: AbortSignal): Promise
     });
   }
   return out;
+}
+
+// ─── Reverse geocode (photo locations → city) ────────────────────────────────
+
+/** Stable city place_id matching the server's id scheme (see /api/pins).
+ *  Used so photo-derived cities dedupe cleanly against already-saved places. */
+export function stableCityPlaceId(
+  city: string,
+  state: string | null,
+  country: string | null,
+): string {
+  return `city:${[city, state, country]
+    .filter((v): v is string => Boolean(v))
+    .map((v) => v.trim().toLowerCase())
+    .join("|")}`;
+}
+
+function makeCityResult(p: {
+  city: string;
+  state?: string | null;
+  country: string;
+  countryCode?: string | null;
+  lat: number;
+  lng: number;
+}): GeoResult {
+  const city = canonicalCity(p.city);
+  return {
+    place_id: stableCityPlaceId(city, p.state ?? null, p.country),
+    display_name: [city, p.state, p.country].filter(Boolean).join(", "),
+    lat: p.lat,
+    lng: p.lng,
+    address: {
+      city,
+      state: p.state ?? undefined,
+      country: p.country,
+      country_code: p.countryCode ?? undefined,
+    },
+    type: "city",
+    class: "place",
+    addresstype: "city",
+    landmark_name: null,
+  };
+}
+
+async function appleMapsReverse(
+  lat: number,
+  lng: number,
+  signal?: AbortSignal,
+): Promise<GeoResult | null> {
+  const accessToken = await getAppleMapsAccessToken();
+  if (!accessToken) return null;
+
+  let res: Response;
+  try {
+    res = await fetch(
+      `https://maps-api.apple.com/v1/reverseGeocode?loc=${lat},${lng}&lang=en-US`,
+      { signal, headers: { Authorization: `Bearer ${accessToken}` } },
+    );
+  } catch {
+    return null;
+  }
+  if (!res.ok) return null;
+
+  const data = (await res.json()) as { results?: AppleMapsResult[] };
+  for (const place of data.results ?? []) {
+    const city = place.structuredAddress?.locality;
+    const country = place.country;
+    if (!city || !country) continue;
+    return makeCityResult({
+      city,
+      state: place.structuredAddress?.administrativeArea ?? null,
+      country,
+      countryCode: place.countryCode ?? null,
+      lat: place.coordinate.latitude,
+      lng: place.coordinate.longitude,
+    });
+  }
+  return null;
+}
+
+async function nominatimReverse(
+  lat: number,
+  lng: number,
+  signal?: AbortSignal,
+): Promise<GeoResult | null> {
+  try {
+    const res = await fetch(
+      `https://nominatim.openstreetmap.org/reverse` +
+        `?format=json&lat=${lat}&lon=${lng}&zoom=10&addressdetails=1&accept-language=en`,
+      { signal, headers: { "User-Agent": "Explrd/1.0", "Accept-Language": "en" } },
+    );
+    if (!res.ok) return null;
+    const data = (await res.json()) as {
+      address?: Record<string, string | undefined>;
+    };
+    const addr = data.address;
+    if (!addr) return null;
+    const city =
+      addr.city ?? addr.town ?? addr.village ?? addr.municipality ?? addr.county;
+    const country = addr.country;
+    if (!city || !country) return null;
+    return makeCityResult({
+      city,
+      state: addr.state ?? addr.region ?? null,
+      country,
+      countryCode: addr.country_code?.toUpperCase() ?? null,
+      lat,
+      lng,
+    });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Reverse-geocode a coordinate to its city. Powers the photo-import flow, which
+ * turns a photo's GPS location into a savable city. Apple Maps first (best data,
+ * 25k/day, same ranking as the native Maps app), Nominatim as a fallback.
+ * Returns null when neither provider can resolve a locality (e.g. open ocean).
+ */
+export async function reverseGeocodeCity(
+  lat: number,
+  lng: number,
+  signal?: AbortSignal,
+): Promise<GeoResult | null> {
+  const apple = await appleMapsReverse(lat, lng, signal);
+  if (apple) return apple;
+  return nominatimReverse(lat, lng, signal);
 }
 
 // ─── Nominatim landmark/city search ─────────────────────────────────────────
@@ -248,11 +388,12 @@ export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise
       ? r.display_name.split(",")[0].trim()
       : nominatimAddrCity(addr);
     if (!resolvedCity) continue;
+    const city = canonicalCity(resolvedCity);
 
     // Nominatim uses slash-separated bilingual names (e.g. "Valais/Wallis") —
     // keep only the first segment for display and dedup consistency
     const cleanState = state?.split("/")[0].trim();
-    const key = `${resolvedCity.toLowerCase()}|${cleanState?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
+    const key = `${city.toLowerCase()}|${cleanState?.toLowerCase() ?? ""}|${country?.toLowerCase() ?? ""}`;
     if (seen.has(key)) continue;
     seen.add(key);
 
@@ -260,10 +401,10 @@ export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise
       place_id: isStrictCity
         ? `nom:${r.place_id}`
         : `nom:city:${key.replace(/\|/g, ":")}`,
-      display_name: [resolvedCity, cleanState, country].filter(Boolean).join(", "),
+      display_name: [city, cleanState, country].filter(Boolean).join(", "),
       lat: parseFloat(r.lat),
       lng: parseFloat(r.lon),
-      address: { city: resolvedCity, state: cleanState, country, country_code: countryCode },
+      address: { city, state: cleanState, country, country_code: countryCode },
       type: isStrictCity ? (r.type ?? null) : "city",
       class: isStrictCity ? (r.class ?? null) : "place",
       addresstype: isStrictCity ? (r.addresstype ?? null) : "city",
@@ -275,9 +416,9 @@ export async function nominatimGeocode(q: string, signal?: AbortSignal): Promise
 
 // Dedup key using full city+state+country
 function cityDedupKey(r: GeoResult): string {
-  const city =
-    (r.address.city as string | undefined) ??
-    r.display_name.split(",")[0].trim();
+  const city = canonicalCity(
+    (r.address.city as string | undefined) ?? r.display_name.split(",")[0].trim(),
+  );
   const state = (r.address.state as string | undefined) ?? "";
   const country = (r.address.country as string | undefined) ?? "";
   return [city, state, country].map((s) => s.toLowerCase().trim()).join("|");
@@ -286,26 +427,28 @@ function cityDedupKey(r: GeoResult): string {
 // Coarser key using only city+country — catches duplicates where state names
 // differ between providers (e.g. "Valais" vs "Valais/Wallis")
 function cityShortKey(r: GeoResult): string {
-  const city =
-    (r.address.city as string | undefined) ??
-    r.display_name.split(",")[0].trim();
+  const city = canonicalCity(
+    (r.address.city as string | undefined) ?? r.display_name.split(",")[0].trim(),
+  );
   const country = (r.address.country as string | undefined) ?? "";
   return [city, country].map((s) => s.toLowerCase().trim()).join("|");
 }
 
 /** Normalize a Geoapify result to clean "City, State, Country" format. */
 function normalizeGeoapifyResult(r: GeoResult): GeoResult | null {
-  const city =
+  const rawCity =
     (r.address.city as string | undefined) ??
     (r.address.town as string | undefined) ??
     (r.address.village as string | undefined) ??
     r.display_name.split(",")[0].trim();
   const state = r.address.state as string | undefined;
   const country = r.address.country as string | undefined;
-  if (!city) return null;
+  if (!rawCity) return null;
+  const city = canonicalCity(rawCity);
   return {
     ...r,
     display_name: [city, state, country].filter(Boolean).join(", "),
+    address: { ...r.address, city },
   };
 }
 
@@ -471,7 +614,7 @@ export async function fetchPublicProfile(
   signal?: AbortSignal
 ): Promise<FriendProfilePayload> {
   const res = await fetch(
-    `${API_BASE}/api/public-profile/${encodeURIComponent(slug)}`,
+    `${API_BASE}/api/public-profile/${encodeURIComponent(slug)}?boundaries=country`,
     { signal }
   );
   if (res.status === 404) {
@@ -590,12 +733,12 @@ export type PublicSharePayload = {
   expiresAt: string;
 };
 
-/** GET /api/public-share?token= */
+/** GET /api/public-share/:token */
 export async function fetchPublicShare(
   token: string
 ): Promise<PublicSharePayload> {
   const res = await fetch(
-    `${API_BASE}/api/public-share?token=${encodeURIComponent(token)}`
+    `${API_BASE}/api/public-share/${encodeURIComponent(token)}?boundaries=none`
   );
   if (!res.ok) throw new Error(`fetchPublicShare: ${res.status}`);
   return res.json();

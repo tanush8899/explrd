@@ -35,6 +35,10 @@ export const colors = {
   dangerSoft: "rgba(255,59,48,0.10)",
   success:    "#34c759",
 
+  // Map ownership — you blue, friend-only orange, overlaps purple
+  orange: "#ff9500",
+  purple: "#8b5cf6",
+
   // On-dark text (used inside dark gradient hero cards)
   onDark:          "#ffffff",
   onDarkSecondary: "rgba(255,255,255,0.7)",

@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
+import { useRouter, type Href } from "expo-router";
 import { sanitizeUsernameInput, validateUsername } from "@explrd/shared";
 import { SheetScrollContext } from "@/components/Sheet";
 import { useSession } from "@/lib/SessionContext";
@@ -39,6 +40,7 @@ type Props = {
  * so there's no visibility toggle — just a shareable handle.
  */
 export default function ProfilePanel({ displayName: fallbackName, avatarLabel }: Props) {
+  const router = useRouter();
   const { session, user } = useSession();
   const { profile, setProfile } = useProfile();
   const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
@@ -269,6 +271,24 @@ export default function ProfilePanel({ displayName: fallbackName, avatarLabel }:
         )}
       </TouchableOpacity>
 
+      {/* Import places from the photo library */}
+      <TouchableOpacity
+        style={styles.syncBtn}
+        onPress={() => router.push("/photo-sync" as Href)}
+        activeOpacity={0.8}
+      >
+        <View style={styles.syncIcon}>
+          <Ionicons name="images-outline" size={18} color={colors.blue} />
+        </View>
+        <View style={{ flex: 1 }}>
+          <Text style={styles.syncTitle}>Sync from Photos</Text>
+          <Text style={styles.syncHint}>
+            Scan your photo gallery to add any new places you've visited.
+          </Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.faint} />
+      </TouchableOpacity>
+
       {/* Danger zone — delete account */}
       <View style={styles.dangerZone}>
         <TouchableOpacity
@@ -368,6 +388,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
   },
   saveBtnText: { color: "#ffffff", fontSize: 15, fontWeight: "700" },
+
+  // Sync from Photos
+  syncBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 12,
+    marginTop: space.xxl,
+    padding: 14,
+    borderRadius: radius.md,
+    backgroundColor: colors.fill,
+  },
+  syncIcon: {
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: colors.blueSoft,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  syncTitle: { fontSize: 15, fontWeight: "700", color: colors.ink },
+  syncHint: { fontSize: 12, color: colors.muted, marginTop: 2, lineHeight: 16 },
 
   // Danger zone — delete account
   dangerZone: {

@@ -1,6 +1,6 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { StyleSheet, View } from "react-native";
-import MapView, { Marker, type Camera, type Region } from "react-native-maps";
+import MapView, { Geojson, Marker, type Camera, type Region } from "react-native-maps";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { GlassCircleButton, Icon } from "@/components/Glass";
 import { hapticLight } from "@/lib/haptics";
@@ -34,7 +34,27 @@ function overlayKey(p: SavedPlace): string {
   return `${city}|${country}`;
 }
 
+function countryKey(p: SavedPlace): string {
+  return (p.normalized_country ?? p.country ?? "").toLowerCase().trim();
+}
+
 type MapMode = "globe" | "standard";
+// "city" = individual pins, "country" = highlighted country outlines.
+type HighlightMode = "city" | "country";
+type CountryOwner = "mine" | "friend" | "both";
+
+// Highlight colours mirror the city pin dots for consistency: you blue,
+// friend-only orange, overlaps purple.
+const COUNTRY_FILL: Record<CountryOwner, string> = {
+  mine:   "rgba(0,122,255,0.32)",
+  friend: "rgba(255,149,0,0.34)",
+  both:   "rgba(139,92,246,0.38)",
+};
+const COUNTRY_STROKE: Record<CountryOwner, string> = {
+  mine:   "#007aff",
+  friend: "#ff9500",
+  both:   "#8b5cf6",
+};
 
 const GLOBE_CAMERA: Camera = {
   center: { latitude: 25, longitude: 10 },
@@ -58,8 +78,10 @@ export default function PlacesMap({ places, previewCoord, friendOverlay, bottomI
   const mapRef = useRef<MapView>(null);
   const insets = useSafeAreaInsets();
   const [mode, setMode] = useState<MapMode>("globe");
+  const [view, setView] = useState<HighlightMode>("city");
 
   const isGlobe = mode === "globe";
+  const isCountry = view === "country";
 
   const modeRef = useRef(mode);
   modeRef.current = mode;
@@ -79,6 +101,39 @@ export default function PlacesMap({ places, previewCoord, friendOverlay, bottomI
 
   // Everything currently visible — drives the fit-to-coordinates behaviour
   const visiblePlaces = [...myMarkers, ...friendMarkers];
+
+  // Country highlighting — group saved places by country, tagging each as mine /
+  // friend / both, and pick a representative place that carries a boundary.
+  const countryGroups = useMemo(() => {
+    if (!isCountry) return [];
+    const mine = new Map<string, SavedPlace>();
+    const friend = new Map<string, SavedPlace>();
+    const collect = (list: SavedPlace[], into: Map<string, SavedPlace>) => {
+      for (const p of list) {
+        const k = countryKey(p);
+        if (!k) continue;
+        const cur = into.get(k);
+        // Prefer whichever record actually carries a country_boundary polygon.
+        if (!cur || (!cur.country_boundary && p.country_boundary)) into.set(k, p);
+      }
+    };
+    if (overlay?.filter !== "friend") collect(places, mine);
+    if (overlay) collect(overlay.places, friend);
+
+    const out: { key: string; owner: CountryOwner; boundary: NonNullable<SavedPlace["country_boundary"]> }[] = [];
+    for (const k of new Set([...mine.keys(), ...friend.keys()])) {
+      const inMine = mine.has(k);
+      const inFriend = friend.has(k);
+      const rep = (mine.get(k) ?? friend.get(k))!;
+      if (!rep.country_boundary) continue; // can't outline without a polygon
+      out.push({
+        key: k,
+        owner: inMine && inFriend ? "both" : inFriend ? "friend" : "mine",
+        boundary: rep.country_boundary,
+      });
+    }
+    return out;
+  }, [isCountry, places, overlay]);
 
   // Fit to places when switching to flat — skip when a preview is active
   useEffect(() => {
@@ -156,46 +211,59 @@ export default function PlacesMap({ places, previewCoord, friendOverlay, bottomI
         showsMyLocationButton={false}
         mapPadding={{ top: 0, right: 0, bottom: bottomInset, left: LOGO_LEFT_INSET }}
       >
-        {myMarkers.map((place) => (
-          <Marker
-            key={`mine:${place.place_id}`}
-            coordinate={{ latitude: place.lat, longitude: place.lng }}
-            title={place.name ?? place.city ?? place.formatted ?? undefined}
-            description={[place.city, place.country].filter(Boolean).join(", ") || undefined}
-            anchor={{ x: 0.5, y: 0.5 }}
-            tracksViewChanges={false}
-          >
-            <View style={styles.markerOuter}>
-              <View style={styles.markerInner} />
-            </View>
-          </Marker>
-        ))}
+        {isCountry &&
+          countryGroups.map((g) => (
+            <Geojson
+              key={`country:${g.key}`}
+              geojson={g.boundary as React.ComponentProps<typeof Geojson>["geojson"]}
+              fillColor={COUNTRY_FILL[g.owner]}
+              strokeColor={COUNTRY_STROKE[g.owner]}
+              strokeWidth={1.5}
+            />
+          ))}
 
-        {friendMarkers.map((place) => {
-          const isShared = overlay?.filter === "both" && sharedKeys.has(overlayKey(place));
-          return (
+        {!isCountry &&
+          myMarkers.map((place) => (
             <Marker
-              key={`friend:${place.place_id}`}
+              key={`mine:${place.place_id}`}
               coordinate={{ latitude: place.lat, longitude: place.lng }}
               title={place.name ?? place.city ?? place.formatted ?? undefined}
-              description={
-                isShared
-                  ? `You and ${overlay?.name ?? "your friend"} have both been here!`
-                  : [place.city, place.country].filter(Boolean).join(", ") || undefined
-              }
+              description={[place.city, place.country].filter(Boolean).join(", ") || undefined}
               anchor={{ x: 0.5, y: 0.5 }}
               tracksViewChanges={false}
             >
-              <View style={[styles.markerOuter, isShared && styles.markerOuterShared]}>
-                <View style={isShared ? styles.markerInnerShared : styles.markerInnerFriend} />
+              <View style={styles.markerOuter}>
+                <View style={styles.markerInner} />
               </View>
             </Marker>
-          );
-        })}
+          ))}
+
+        {!isCountry &&
+          friendMarkers.map((place) => {
+            const isShared = overlay?.filter === "both" && sharedKeys.has(overlayKey(place));
+            return (
+              <Marker
+                key={`friend:${place.place_id}`}
+                coordinate={{ latitude: place.lat, longitude: place.lng }}
+                title={place.name ?? place.city ?? place.formatted ?? undefined}
+                description={
+                  isShared
+                    ? `You and ${overlay?.name ?? "your friend"} have both been here!`
+                    : [place.city, place.country].filter(Boolean).join(", ") || undefined
+                }
+                anchor={{ x: 0.5, y: 0.5 }}
+                tracksViewChanges={false}
+              >
+                <View style={[styles.markerOuter, isShared && styles.markerOuterShared]}>
+                  <View style={isShared ? styles.markerInnerShared : styles.markerInnerFriend} />
+                </View>
+              </Marker>
+            );
+          })}
 
       </MapView>
 
-      {/* Floating dark-glass map control — Flighty's stacked globe controls */}
+      {/* Floating dark-glass map controls — Flighty's stacked globe controls */}
       <GlassCircleButton
         onPress={handleToggle}
         scheme="dark"
@@ -205,6 +273,24 @@ export default function PlacesMap({ places, previewCoord, friendOverlay, bottomI
         <Icon
           name={isGlobe ? "map.fill" : "globe.americas.fill"}
           fallback={isGlobe ? "🗺" : "🌐"}
+          size={20}
+          color="#ffffff"
+        />
+      </GlassCircleButton>
+
+      {/* City ↔ country highlighting */}
+      <GlassCircleButton
+        onPress={() => {
+          hapticLight();
+          setView((v) => (v === "city" ? "country" : "city"));
+        }}
+        scheme="dark"
+        accessibilityLabel={isCountry ? "Show cities" : "Highlight countries"}
+        style={{ position: "absolute", top: insets.top + 12 + 44 + 10, right: 16 }}
+      >
+        <Icon
+          name={isCountry ? "mappin.and.ellipse" : "globe"}
+          fallback={isCountry ? "📍" : "🌐"}
           size={20}
           color="#ffffff"
         />
@@ -226,11 +312,11 @@ const styles = StyleSheet.create({
   },
   markerInner: {
     width: 9, height: 9, borderRadius: 4.5,
-    backgroundColor: "#111214",
+    backgroundColor: "#007aff",
   },
   markerInnerFriend: {
     width: 9, height: 9, borderRadius: 4.5,
-    backgroundColor: "#007aff",
+    backgroundColor: "#ff9500",
   },
   markerInnerShared: {
     width: 9, height: 9, borderRadius: 4.5,

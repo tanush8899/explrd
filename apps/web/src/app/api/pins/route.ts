@@ -1,11 +1,6 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
-import { getBoundaryQuery, getSavableLocality } from "@/lib/exploration";
-import { resolveBoundaryFeatureCollection } from "@/lib/region-boundaries";
-import {
-  getStaticContinentFeatureCollection,
-  getStaticCountryFeatureCollection,
-} from "@/lib/static-boundaries";
+import { getSavableLocality } from "@/lib/exploration";
 
 type Body = {
   place_id: string;
@@ -90,36 +85,11 @@ export async function POST(req: Request) {
         { status: 400 }
       );
     }
-    const [cityBoundary, stateBoundary] = await Promise.all([
-      city
-        ? resolveBoundaryFeatureCollection({
-            mode: "city",
-            placeId: stablePlaceId,
-            lat: body.lat,
-            lng: body.lng,
-            city,
-            state,
-            country,
-            continent,
-            query: getBoundaryQuery({ city, state, country, continent }, "city"),
-          })
-        : Promise.resolve(null),
-      state
-        ? resolveBoundaryFeatureCollection({
-            mode: "state",
-            placeId: stablePlaceId,
-            lat: body.lat,
-            lng: body.lng,
-            city,
-            state,
-            country,
-            continent,
-            query: getBoundaryQuery({ city, state, country, continent }, "state"),
-          })
-        : Promise.resolve(null),
-    ]);
-    const countryBoundary = getStaticCountryFeatureCollection(country);
-    const continentBoundary = getStaticContinentFeatureCollection(continent);
+    // Boundary polygons are no longer stored. The mobile app (the only client
+    // that renders a map) derives the country outline from a static dataset at
+    // read time, so persisting heavy GeoJSON here is pure waste — it bloated the
+    // DB and slowed every save with external boundary lookups. Skipping it keeps
+    // places_cache tiny and makes saves (incl. bulk photo-import) fast.
 
     // 1) Upsert into places_cache
     let { error: cacheErr } = await supabase.from("places_cache").upsert(
@@ -137,10 +107,6 @@ export async function POST(req: Request) {
         lat: body.lat,
         lng: body.lng,
         formatted: displayName,
-        city_boundary: cityBoundary ? JSON.stringify(cityBoundary) : null,
-        state_boundary: stateBoundary ? JSON.stringify(stateBoundary) : null,
-        country_boundary: countryBoundary ? JSON.stringify(countryBoundary) : null,
-        continent_boundary: continentBoundary ? JSON.stringify(continentBoundary) : null,
       },
       { onConflict: "place_id" }
     );

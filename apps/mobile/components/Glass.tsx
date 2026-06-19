@@ -24,6 +24,9 @@ type GlassSurfaceProps = ViewProps & {
   tintColor?: string;
   /** "dark" = floating controls over the globe; "light" = bright UI surfaces. */
   scheme?: Scheme;
+  /** Drops the frosted-fill opacity so the surface reads as clear glass that
+   *  hovers over content (used by the floating nav pill). */
+  transparent?: boolean;
 };
 
 /**
@@ -36,6 +39,7 @@ export function GlassSurface({
   interactive,
   tintColor,
   scheme = "light",
+  transparent,
   ...rest
 }: GlassSurfaceProps) {
   if (hasLiquidGlass) {
@@ -61,7 +65,12 @@ export function GlassSurface({
     );
   }
   return (
-    <BlurView intensity={70} tint="light" style={[styles.fallbackLight, style]} {...rest}>
+    <BlurView
+      intensity={transparent ? 48 : 70}
+      tint="light"
+      style={[transparent ? styles.fallbackClear : styles.fallbackLight, style]}
+      {...rest}
+    >
       {children}
     </BlurView>
   );
@@ -148,6 +157,12 @@ const styles = StyleSheet.create({
     backgroundColor: "rgba(255,255,255,0.6)",
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(255,255,255,0.75)",
+    overflow: "hidden",
+  },
+  fallbackClear: {
+    backgroundColor: "rgba(255,255,255,0.32)",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: "rgba(255,255,255,0.55)",
     overflow: "hidden",
   },
   fallbackDark: {

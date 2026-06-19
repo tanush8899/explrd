@@ -350,7 +350,8 @@ const styles = StyleSheet.create({
   container: {
     paddingHorizontal: space.lg,
     paddingTop: space.xs,
-    paddingBottom: space.xl,
+    // Clear the floating glass nav pill that hovers over the content.
+    paddingBottom: 120,
   },
 
   // Hero

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { createClient } from "@supabase/supabase-js";
 import { hydratePlaceBoundaries, parseBoundary } from "@/lib/place-boundaries";
+import { getStaticCountryFeatureCollection } from "@/lib/static-boundaries";
 
 type PlaceRow = {
   place_id: string;
@@ -101,6 +102,20 @@ export async function GET(req: Request) {
       );
     }
 
+    // The mobile app only renders country outlines (never city/state/continent),
+    // so it requests ?boundaries=country to skip the heavy polygons entirely.
+    // This is the single biggest lever on Fast Origin Transfer + Supabase egress:
+    // the continent polygon alone is ~150 KB and was shipped once per saved place.
+    const lite = new URL(req.url).searchParams.get("boundaries") === "country";
+
+    const boundaryCols = lite
+      ? ""
+      : `,
+          city_boundary,
+          state_boundary,
+          country_boundary,
+          continent_boundary`;
+
     let { data, error } = await supabase
       .from("user_places")
       .select(
@@ -119,11 +134,7 @@ export async function GET(req: Request) {
           normalized_continent,
           lat,
           lng,
-          formatted,
-          city_boundary,
-          state_boundary,
-          country_boundary,
-          continent_boundary
+          formatted${boundaryCols}
         )
       `
       )
@@ -161,25 +172,42 @@ export async function GET(req: Request) {
       );
     }
 
-    const places = await Promise.all(
-      ((data ?? []) as JoinedPlaceRow[])
+    const rows = ((data ?? []) as JoinedPlaceRow[])
       .map((row) =>
         Array.isArray(row.places_cache) ? row.places_cache[0] ?? null : row.places_cache
       )
       .filter(isPlaceRow)
       .map((place) =>
         "normalized_city" in place ? place : withMissingNormalizedFields(place)
-      )
-      .map((place) => ({
+      );
+
+    // Lite (mobile): the heavy polygon columns were never selected. Attach only
+    // the static country outline the mobile map uses; leave the rest null.
+    if (lite) {
+      const places = rows.map((place) => ({
         ...place,
-        city_boundary: parseBoundary(place.city_boundary),
-        state_boundary: parseBoundary(place.state_boundary),
-        country_boundary: parseBoundary(place.country_boundary),
-        continent_boundary: parseBoundary(place.continent_boundary),
-      }))
-      // Only hydrate static country/continent lookups — skip external API calls
-      // for missing city/state boundaries so the initial load is fast.
-      .map((place) => hydratePlaceBoundaries(place, { skipExternalFetch: true }))
+        city_boundary: null,
+        state_boundary: null,
+        country_boundary: getStaticCountryFeatureCollection(
+          place.normalized_country ?? place.country
+        ),
+        continent_boundary: null,
+      }));
+      return NextResponse.json({ places });
+    }
+
+    const places = await Promise.all(
+      rows
+        .map((place) => ({
+          ...place,
+          city_boundary: parseBoundary(place.city_boundary),
+          state_boundary: parseBoundary(place.state_boundary),
+          country_boundary: parseBoundary(place.country_boundary),
+          continent_boundary: parseBoundary(place.continent_boundary),
+        }))
+        // Only hydrate static country/continent lookups — skip external API calls
+        // for missing city/state boundaries so the initial load is fast.
+        .map((place) => hydratePlaceBoundaries(place, { skipExternalFetch: true }))
     );
 
     return NextResponse.json({ places });

@@ -145,9 +145,10 @@ const Sheet = forwardRef<SheetHandle, Props>(function Sheet(
   const heightsRef = useRef(heights);
   heightsRef.current = heights;
 
-  // Bottom padding for the scroll content so its last items clear the floating
-  // footer (the glass nav pill). ~60px nav row + the home-indicator inset.
-  const contentPadBottom = footer != null ? 60 + insets.bottom : 0;
+  // The content fills the full card height so the list scrolls *behind* the
+  // translucent glass nav pill (which floats over it). Each panel reserves its
+  // own bottom padding so the last row can still clear the footer.
+  const contentPadBottom = 0;
 
   // ── Shared values (UI thread source of truth) ───────────────────────────────
   const height      = useSharedValue(heights[initialIndex]); // live sheet height (px)
