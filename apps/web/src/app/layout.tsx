@@ -5,8 +5,8 @@ import Script from "next/script";
 import "leaflet/dist/leaflet.css";
 
 export const metadata = {
-  title: "Explr",
-  description: "Track where you've explored, see your travel stats, and share your map.",
+  title: "EXPLRD — Track where you've explored",
+  description: "Track every place you've explored, see your travel stats, and share your map with friends. Coming soon on iPhone.",
 };
 
 export const viewport: Viewport = {

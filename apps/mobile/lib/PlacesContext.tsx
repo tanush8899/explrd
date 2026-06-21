@@ -6,7 +6,7 @@ import React, {
   useState,
 } from "react";
 import type { SavedPlace } from "@explrd/shared";
-import { fetchMyPlaces, deletePin } from "./api";
+import { fetchMyPlaces, deletePin, updatePlaceNotes } from "./api";
 import { useSession } from "./SessionContext";
 
 type PlacesCtx = {
@@ -15,6 +15,9 @@ type PlacesCtx = {
   setPlaces: React.Dispatch<React.SetStateAction<SavedPlace[]>>;
   refresh: () => Promise<void>;
   deletePlace: (placeId: string) => Promise<void>;
+  /** Set/clear a place's private note. Updates optimistically, reconciling with
+   *  the server's normalized value (trimmed/clamped/empty→null). */
+  updateNotes: (placeId: string, notes: string | null) => Promise<void>;
 };
 
 const PlacesContext = createContext<PlacesCtx>({
@@ -23,6 +26,7 @@ const PlacesContext = createContext<PlacesCtx>({
   setPlaces: () => {},
   refresh: async () => {},
   deletePlace: async () => {},
+  updateNotes: async () => {},
 });
 
 export function PlacesProvider({ children }: { children: React.ReactNode }) {
@@ -61,8 +65,21 @@ export function PlacesProvider({ children }: { children: React.ReactNode }) {
     [session?.access_token],
   );
 
+  const updateNotes = useCallback(
+    async (placeId: string, notes: string | null) => {
+      if (!session?.access_token) throw new Error("No session");
+      const saved = await updatePlaceNotes(session.access_token, placeId, notes);
+      setPlaces((prev) =>
+        prev.map((p) => (p.place_id === placeId ? { ...p, notes: saved } : p)),
+      );
+    },
+    [session?.access_token],
+  );
+
   return (
-    <PlacesContext.Provider value={{ places, loading, setPlaces, refresh, deletePlace }}>
+    <PlacesContext.Provider
+      value={{ places, loading, setPlaces, refresh, deletePlace, updateNotes }}
+    >
       {children}
     </PlacesContext.Provider>
   );

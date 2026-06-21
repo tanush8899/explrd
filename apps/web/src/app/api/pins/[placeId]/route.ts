@@ -9,6 +9,100 @@ type RouteContext = {
 
 export const runtime = "nodejs";
 
+// Keep in sync with the editor's character counter in the mobile app.
+const NOTES_MAX = 500;
+
+/**
+ * PATCH /api/pins/:placeId  body: { notes: string | null }
+ * Updates the caller's private note for a saved place. Notes live on the
+ * user_places pin (per-user), so this only touches the signed-in user's row.
+ */
+export async function PATCH(req: Request, context: RouteContext) {
+  try {
+    const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+    if (!supabaseUrl || !serviceKey) {
+      return NextResponse.json(
+        {
+          error: "missing_env",
+          details:
+            "NEXT_PUBLIC_SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY is missing.",
+        },
+        { status: 500 }
+      );
+    }
+
+    const supabase = createClient(supabaseUrl, serviceKey);
+
+    const authHeader = req.headers.get("authorization") ?? "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7) : null;
+
+    if (!token) {
+      return NextResponse.json({ error: "missing_token" }, { status: 401 });
+    }
+
+    const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+    const userId = userData?.user?.id ?? null;
+
+    if (userErr || !userId) {
+      return NextResponse.json(
+        { error: "invalid_token", details: userErr?.message ?? "No user found" },
+        { status: 401 }
+      );
+    }
+
+    const { placeId: rawPlaceId } = await context.params;
+    const placeId = decodeURIComponent(rawPlaceId ?? "").trim();
+
+    if (!placeId) {
+      return NextResponse.json(
+        { error: "bad_request", details: "A placeId is required." },
+        { status: 400 }
+      );
+    }
+
+    const body = (await req.json().catch(() => ({}))) as { notes?: string | null };
+    // Normalize: trim, collapse empty → null, clamp to the limit.
+    let notes: string | null = null;
+    if (typeof body.notes === "string") {
+      const trimmed = body.notes.trim();
+      notes = trimmed.length === 0 ? null : trimmed.slice(0, NOTES_MAX);
+    }
+
+    const { data: updatedRows, error: updateErr } = await supabase
+      .from("user_places")
+      .update({ notes })
+      .eq("user_id", userId)
+      .eq("place_id", placeId)
+      .select("place_id");
+
+    if (updateErr) {
+      return NextResponse.json(
+        { error: "update_failed", details: updateErr.message },
+        { status: 500 }
+      );
+    }
+
+    if (!updatedRows || updatedRows.length === 0) {
+      return NextResponse.json(
+        { error: "not_found", details: "Saved place not found for this user." },
+        { status: 404 }
+      );
+    }
+
+    return NextResponse.json({ ok: true, place_id: placeId, notes });
+  } catch (e: unknown) {
+    return NextResponse.json(
+      {
+        error: "server_exception",
+        details: e instanceof Error ? e.message : String(e),
+      },
+      { status: 500 }
+    );
+  }
+}
+
 export async function DELETE(req: Request, context: RouteContext) {
   try {
     const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;

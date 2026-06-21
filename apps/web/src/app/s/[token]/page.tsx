@@ -308,7 +308,7 @@ export default function PublicSharePage({ params }: { params: Promise<{ token: s
           </p>
         </div>
         <Link
-          href="/login"
+          href="/"
           className="rounded-xl bg-[#111214] px-5 py-2.5 text-sm font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition hover:bg-[#2a2d31]"
         >
           Open Explr
@@ -364,7 +364,7 @@ export default function PublicSharePage({ params }: { params: Promise<{ token: s
                       {displayName}&apos;s Places
                     </h1>
                     <Link
-                      href="/login"
+                      href="/"
                       onPointerDown={(e) => e.stopPropagation()}
                       className="shrink-0 rounded-full border border-[#e1e4e8] bg-white px-3.5 py-1.5 text-[12px] font-medium text-[#111214] shadow-[0_1px_2px_rgba(0,0,0,0.04)] transition hover:bg-[#f6f7f8]"
                     >

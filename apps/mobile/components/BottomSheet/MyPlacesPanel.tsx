@@ -8,26 +8,22 @@ import {
   StyleSheet,
 } from "react-native";
 import { SheetScrollContext } from "@/components/Sheet";
-import { LinearGradient } from "expo-linear-gradient";
 import { Ionicons } from "@expo/vector-icons";
 import { getExplrdStats, getPlaceHierarchy, nextCityMilestone } from "@explrd/shared";
 import type { ContinentNode, CountryNode, SavedPlace } from "@explrd/shared";
 import { countryFlag } from "@/lib/flags";
-import AnimatedBar from "@/components/AnimatedBar";
-import { colors, gradients, radius, space, type as t, shadow } from "@/lib/theme";
-
-// Finite world totals used to show "X of Y" + how much is left.
-const WORLD_COUNTRIES = 195;
-const WORLD_CONTINENTS = 7;
+import WorldExploredCard from "@/components/WorldExploredCard";
+import { colors, radius, space, type as t, shadow } from "@/lib/theme";
 
 type Props = {
   places: SavedPlace[];
   onDelete: (placeId: string) => Promise<void>;
+  onEditNotes: (place: SavedPlace) => void;
   deletingId: string | null;
   displayName?: string;
 };
 
-export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
+export default function MyPlacesPanel({ places, onDelete, onEditNotes, deletingId }: Props) {
   const [open, setOpen] = useState<Record<string, boolean>>({});
 
   const stats = useMemo(() => getExplrdStats(places), [places]);
@@ -48,8 +44,6 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
     ]);
   };
 
-  const worldPct = Math.min(stats.percentWorldTraveled, 100);
-
   // Collapse the sheet on a downward flick at the scroll top; scrolling is only
   // enabled once the sheet is fully open (handled by the Sheet).
   const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
@@ -67,51 +61,14 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
         }
       }}
     >
-      {/* ── Hero: world explored ─────────────────────────────────────────── */}
-      <LinearGradient
-        colors={gradients.hero}
-        start={{ x: 0, y: 0 }}
-        end={{ x: 1, y: 1 }}
-        style={styles.hero}
-      >
-        <Text style={styles.heroEyebrow}>WORLD EXPLORED</Text>
-
-        <View style={styles.heroPctRow}>
-          <Text style={styles.heroPct}>{stats.percentWorldTraveled}%</Text>
-          <Text style={styles.heroPctCaption}>of the planet</Text>
-        </View>
-
-        <View style={styles.heroTrack}>
-          <LinearGradient
-            colors={gradients.progress}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={[styles.heroFill, { width: `${worldPct}%` }]}
-          />
-        </View>
-
-        <View style={styles.heroBars}>
-          <HeroMeter
-            label="Countries"
-            value={stats.uniqueCountries}
-            total={WORLD_COUNTRIES}
-            color="#7cb1ff"
-          />
-          <HeroMeter
-            label="Continents"
-            value={stats.uniqueContinents}
-            total={WORLD_CONTINENTS}
-            color="#b39bff"
-          />
-          <HeroMeter
-            label="Cities"
-            value={stats.uniqueCities}
-            total={nextCityMilestone(stats.uniqueCities)}
-            color="#6ee7b7"
-            milestone
-          />
-        </View>
-      </LinearGradient>
+      {/* ── World explored card ──────────────────────────────────────────── */}
+      <WorldExploredCard
+        percent={stats.percentWorldTraveled}
+        countries={stats.uniqueCountries}
+        continents={stats.uniqueContinents}
+        cities={stats.uniqueCities}
+        cityMilestone={nextCityMilestone(stats.uniqueCities)}
+      />
 
       {/* ── Empty state ──────────────────────────────────────────────────── */}
       {places.length === 0 ? (
@@ -133,6 +90,7 @@ export default function MyPlacesPanel({ places, onDelete, deletingId }: Props) {
             onToggle={toggle}
             deletingId={deletingId}
             onDelete={confirmDelete}
+            onEditNotes={onEditNotes}
           />
         ))
       )}
@@ -148,12 +106,14 @@ function ContinentSection({
   onToggle,
   deletingId,
   onDelete,
+  onEditNotes,
 }: {
   continent: ContinentNode;
   open: Record<string, boolean>;
   onToggle: (key: string) => void;
   deletingId: string | null;
   onDelete: (p: SavedPlace) => void;
+  onEditNotes: (p: SavedPlace) => void;
 }) {
   const pct = Math.min(continent.percentExplored, 100);
   return (
@@ -185,6 +145,7 @@ function ContinentSection({
                   country={country}
                   deletingId={deletingId}
                   onDelete={onDelete}
+                  onEditNotes={onEditNotes}
                 />
               )}
             </View>
@@ -245,10 +206,12 @@ function PlaceList({
   country,
   deletingId,
   onDelete,
+  onEditNotes,
 }: {
   country: CountryNode;
   deletingId: string | null;
   onDelete: (p: SavedPlace) => void;
+  onEditNotes: (p: SavedPlace) => void;
 }) {
   return (
     <View style={styles.placeList}>
@@ -264,6 +227,7 @@ function PlaceList({
                 place={place}
                 deleting={deletingId === place.place_id}
                 onDelete={onDelete}
+                onEditNotes={onEditNotes}
               />
             )),
           )}
@@ -277,18 +241,44 @@ function PlaceRow({
   place,
   deleting,
   onDelete,
+  onEditNotes,
 }: {
   place: SavedPlace;
   deleting: boolean;
   onDelete: (p: SavedPlace) => void;
+  onEditNotes: (p: SavedPlace) => void;
 }) {
   const label = place.name ?? place.city ?? place.formatted ?? place.place_id;
+  const hasNote = !!place.notes && place.notes.trim().length > 0;
   return (
     <View style={styles.placeRow}>
       <View style={styles.placeDot} />
-      <Text style={styles.placeName} numberOfLines={1}>
-        {label}
-      </Text>
+      <TouchableOpacity
+        style={styles.placeNameWrap}
+        onPress={() => onEditNotes(place)}
+        activeOpacity={0.6}
+      >
+        <Text style={styles.placeName} numberOfLines={1}>
+          {label}
+        </Text>
+        {hasNote ? (
+          <Text style={styles.placeNote} numberOfLines={1}>
+            {place.notes}
+          </Text>
+        ) : null}
+      </TouchableOpacity>
+      <TouchableOpacity
+        onPress={() => onEditNotes(place)}
+        hitSlop={8}
+        style={[styles.placeNoteBtn, hasNote && styles.placeNoteBtnActive]}
+        activeOpacity={0.6}
+      >
+        <Ionicons
+          name={hasNote ? "document-text" : "document-text-outline"}
+          size={14}
+          color={hasNote ? colors.blue : colors.faint}
+        />
+      </TouchableOpacity>
       <TouchableOpacity
         onPress={() => onDelete(place)}
         disabled={deleting}
@@ -306,44 +296,6 @@ function PlaceRow({
   );
 }
 
-// ─── Hero meter (sliding progress bar) ───────────────────────────────────────
-
-function HeroMeter({
-  label,
-  value,
-  total,
-  color,
-  milestone = false,
-}: {
-  label: string;
-  value: number;
-  total: number;
-  color: string;
-  /** Cities: `total` is a rolling milestone, not a world ceiling. */
-  milestone?: boolean;
-}) {
-  const pct = Math.min((value / total) * 100, 100);
-  const left = Math.max(total - value, 0);
-
-  return (
-    <View style={styles.meterBlock}>
-      <View style={styles.meterTop}>
-        <Text style={styles.meterLabel}>{label}</Text>
-        <Text style={styles.meterValue}>
-          {value}
-          {milestone ? null : <Text style={styles.meterTotal}> / {total}</Text>}
-        </Text>
-      </View>
-      <AnimatedBar pct={pct} height={5} fillColor={color} trackColor="rgba(255,255,255,0.12)" />
-      {left > 0 ? (
-        <Text style={styles.meterLeft}>
-          {milestone ? `${left} to ${total}` : `${left} to go`}
-        </Text>
-      ) : null}
-    </View>
-  );
-}
-
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
 const styles = StyleSheet.create({
@@ -352,75 +304,6 @@ const styles = StyleSheet.create({
     paddingTop: space.xs,
     // Clear the floating glass nav pill that hovers over the content.
     paddingBottom: 120,
-  },
-
-  // Hero
-  hero: {
-    borderRadius: radius.lg,
-    padding: space.xl,
-    marginBottom: space.xxl,
-    ...shadow.hero,
-  },
-  heroEyebrow: {
-    ...t.eyebrow,
-    color: colors.onDarkSecondary,
-  },
-  heroPctRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    gap: 8,
-    marginTop: space.sm,
-  },
-  heroPct: {
-    fontSize: 52,
-    fontWeight: "800",
-    letterSpacing: -1.6,
-    color: colors.onDark,
-  },
-  heroPctCaption: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: colors.onDarkMuted,
-  },
-  heroTrack: {
-    height: 6,
-    borderRadius: 3,
-    backgroundColor: "rgba(255,255,255,0.14)",
-    overflow: "hidden",
-    marginTop: space.md,
-    marginBottom: space.xl,
-  },
-  heroFill: { height: "100%", borderRadius: 3 },
-
-  // Hero meters (sliding bars)
-  heroBars: { gap: 16 },
-  meterBlock: {},
-  meterTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 7,
-  },
-  meterLabel: {
-    fontSize: 13,
-    fontWeight: "600",
-    color: colors.onDark,
-    letterSpacing: -0.2,
-  },
-  meterValue: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: colors.onDark,
-  },
-  meterTotal: {
-    fontWeight: "500",
-    color: colors.onDarkMuted,
-  },
-  meterLeft: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: colors.onDarkMuted,
-    marginTop: 5,
   },
 
   // Continent section
@@ -532,12 +415,29 @@ const styles = StyleSheet.create({
     borderRadius: 2.5,
     backgroundColor: colors.faint,
   },
+  placeNameWrap: { flex: 1 },
   placeName: {
-    flex: 1,
     fontSize: 15,
     fontWeight: "500",
     color: colors.inkSecondary,
     letterSpacing: -0.2,
+  },
+  placeNote: {
+    ...t.caption,
+    color: colors.muted,
+    marginTop: 1,
+  },
+  placeNoteBtn: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: colors.fill,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  // Tinted well when the place actually has a note, so it reads as "active".
+  placeNoteBtnActive: {
+    backgroundColor: colors.blueSoft,
   },
   placeRemove: {
     width: 24,

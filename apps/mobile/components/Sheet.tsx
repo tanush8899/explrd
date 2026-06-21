@@ -35,7 +35,7 @@ const { height: SCREEN } = Dimensions.get("window");
 
 // ── Layout constants ──────────────────────────────────────────────────────────
 const RADIUS       = r.sheet;                    // iPhone continuous corner curve
-const PILL_CONTENT = 64;                         // handle-row(18) + search-row(44) + margin(2)
+const PILL_CONTENT = 78;                         // search row (~60) + balanced padding
 const MID_H        = Math.round(SCREEN * 0.52);  // state 1
 const FULL_H       = Math.round(SCREEN * 0.90);  // state 2
 // Horizontal side margins per snap (state 0 / 1 / 2). State 2 is edge-to-edge.
@@ -405,13 +405,15 @@ const Sheet = forwardRef<SheetHandle, Props>(function Sheet(
           {/* ── State 0: bordered search pill overlay ──────────────────────── */}
           <GestureDetector gesture={pillPan}>
             <Animated.View
-              style={[styles.pillWrapper, pillStyle]}
+              style={[styles.pillWrapper, pillStyle, { height: PILL_H }]}
               pointerEvents={snap === 0 ? "auto" : "none"}
             >
               <View style={styles.pillHandleRow}>
                 <View style={styles.handlePill} />
               </View>
 
+              {/* Centered in the full card height (the handle floats above), so
+                  the white space above and below the search row is balanced. */}
               <View style={styles.pillContainer}>
                 <TouchableOpacity
                   style={styles.pillSearchRow}
@@ -521,11 +523,17 @@ const styles = StyleSheet.create({
     top: 0,
     left: 14,
     right: 14,
+    // Center the search row in the full card height for balanced top/bottom space.
+    justifyContent: "center",
   },
+  // Floats at the top, out of flow, so it doesn't bias the centering.
   pillHandleRow: {
+    position: "absolute",
+    top: 0,
+    left: 0,
+    right: 0,
     alignItems: "center",
     paddingTop: 8,
-    paddingBottom: 6,
   },
   pillContainer: {
     borderRadius: 28,

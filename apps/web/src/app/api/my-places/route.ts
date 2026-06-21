@@ -138,7 +138,9 @@ export async function GET(req: Request) {
         )
       `
       )
-      .eq("user_id", userId);
+      .eq("user_id", userId)
+      // Newest pins first so "recent stamps" reflects the last places logged.
+      .order("created_at", { ascending: false });
 
     if (error && isMissingNormalizedColumn(error.message)) {
       const fallback = await supabase
@@ -159,7 +161,8 @@ export async function GET(req: Request) {
           )
         `
         )
-        .eq("user_id", userId);
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false });
 
       data = fallback.data as typeof data;
       error = fallback.error;
@@ -181,16 +184,31 @@ export async function GET(req: Request) {
         "normalized_city" in place ? place : withMissingNormalizedFields(place)
       );
 
+    // Per-user notes live on user_places, not the shared places_cache. Fetched
+    // in a separate, isolated query so a not-yet-added `notes` column (the SQL is
+    // run manually) can never break the main places load — it just stays empty.
+    const notesByPlace = new Map<string, string | null>();
+    {
+      const { data: noteRows } = await supabase
+        .from("user_places")
+        .select("place_id, notes")
+        .eq("user_id", userId);
+      for (const r of (noteRows ?? []) as { place_id: string; notes: string | null }[]) {
+        notesByPlace.set(r.place_id, r.notes ?? null);
+      }
+    }
+
     // Lite (mobile): the heavy polygon columns were never selected. Attach only
     // the static country outline the mobile map uses; leave the rest null.
     if (lite) {
       const places = rows.map((place) => ({
         ...place,
+        notes: notesByPlace.get(place.place_id) ?? null,
         city_boundary: null,
         state_boundary: null,
-        country_boundary: getStaticCountryFeatureCollection(
-          place.normalized_country ?? place.country
-        ),
+        country_boundary:
+          getStaticCountryFeatureCollection(place.normalized_country) ??
+          getStaticCountryFeatureCollection(place.country),
         continent_boundary: null,
       }));
       return NextResponse.json({ places });
@@ -200,6 +218,7 @@ export async function GET(req: Request) {
       rows
         .map((place) => ({
           ...place,
+          notes: notesByPlace.get(place.place_id) ?? null,
           city_boundary: parseBoundary(place.city_boundary),
           state_boundary: parseBoundary(place.state_boundary),
           country_boundary: parseBoundary(place.country_boundary),

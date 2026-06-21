@@ -148,7 +148,9 @@ export async function GET(req: Request, context: RouteContext) {
         )
       `
       )
-      .eq("user_id", profile.user_id);
+      .eq("user_id", profile.user_id)
+      // Newest pins first so "recent stamps" reflects the last places logged.
+      .order("created_at", { ascending: false });
 
     if (error && isMissingNormalizedColumn(error.message)) {
       const fallback = await supabase
@@ -169,7 +171,8 @@ export async function GET(req: Request, context: RouteContext) {
           )
         `
         )
-        .eq("user_id", profile.user_id);
+        .eq("user_id", profile.user_id)
+        .order("created_at", { ascending: false });
 
       data = fallback.data as typeof data;
       error = fallback.error;
@@ -196,9 +199,9 @@ export async function GET(req: Request, context: RouteContext) {
           ...place,
           city_boundary: null,
           state_boundary: null,
-          country_boundary: getStaticCountryFeatureCollection(
-            place.normalized_country ?? place.country
-          ),
+          country_boundary:
+            getStaticCountryFeatureCollection(place.normalized_country) ??
+            getStaticCountryFeatureCollection(place.country),
           continent_boundary: null,
         }))
       : await Promise.all(

@@ -4,6 +4,7 @@ import type {
   UserProfile,
   FriendsPayload,
   FriendSummary,
+  CommunityComparison,
 } from "@explrd/shared";
 
 const API_BASE = (process.env.EXPO_PUBLIC_API_BASE_URL ?? "").replace(/\/$/, "");
@@ -68,6 +69,17 @@ export async function fetchMyPlaces(
   return (data.places ?? []) as SavedPlace[];
 }
 
+/** GET /api/community-stats — anonymized comparison of you vs all explorers. */
+export async function fetchCommunityStats(
+  accessToken: string
+): Promise<CommunityComparison> {
+  const res = await fetch(`${API_BASE}/api/community-stats`, {
+    headers: authHeaders(accessToken),
+  });
+  if (!res.ok) throw new Error(`fetchCommunityStats: ${res.status}`);
+  return (await res.json()) as CommunityComparison;
+}
+
 export type PinBody = {
   place_id: string;
   display_name: string;
@@ -90,6 +102,32 @@ export async function savePin(
     const err = await res.json().catch(() => ({})) as Record<string, string>;
     throw new Error(err.error ?? `savePin: ${res.status}`);
   }
+}
+
+/** Max length of a per-city note. Mirrors NOTES_MAX in the pins PATCH route. */
+export const NOTES_MAX = 500;
+
+/** PATCH /api/pins/:placeId — set/clear the caller's private note. Returns the
+ *  normalized note the server stored (trimmed, clamped, empty → null). */
+export async function updatePlaceNotes(
+  accessToken: string,
+  placeId: string,
+  notes: string | null,
+): Promise<string | null> {
+  const res = await fetch(
+    `${API_BASE}/api/pins/${encodeURIComponent(placeId)}`,
+    {
+      method: "PATCH",
+      headers: authHeaders(accessToken),
+      body: JSON.stringify({ notes }),
+    },
+  );
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.error ?? `updatePlaceNotes: ${res.status}`);
+  }
+  const data = (await res.json()) as { notes: string | null };
+  return data.notes ?? null;
 }
 
 /** DELETE /api/pins/:placeId */
@@ -696,6 +734,41 @@ export async function searchUsers(
   if (!res.ok) throw new Error(`searchUsers: ${res.status}`);
   const data = (await res.json()) as { results?: FriendSummary[] };
   return data.results ?? [];
+}
+
+// ─── Push notifications ────────────────────────────────────────────────────────
+
+/** POST /api/push-token — register this device's Expo push token. */
+export async function registerPushToken(
+  accessToken: string,
+  token: string,
+  platform?: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/push-token`, {
+    method: "POST",
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ token, platform }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.error ?? `registerPushToken: ${res.status}`);
+  }
+}
+
+/** DELETE /api/push-token — unregister a token (on sign-out). */
+export async function unregisterPushToken(
+  accessToken: string,
+  token: string,
+): Promise<void> {
+  const res = await fetch(`${API_BASE}/api/push-token`, {
+    method: "DELETE",
+    headers: authHeaders(accessToken),
+    body: JSON.stringify({ token }),
+  });
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({})) as Record<string, string>;
+    throw new Error(err.error ?? `unregisterPushToken: ${res.status}`);
+  }
 }
 
 // ─── Account ─────────────────────────────────────────────────────────────────

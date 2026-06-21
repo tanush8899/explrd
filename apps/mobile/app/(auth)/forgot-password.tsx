@@ -61,7 +61,7 @@ export default function ForgotPasswordScreen() {
               {sent ? (
                 <View style={{ gap: 12 }}>
                   <Text style={styles.body}>
-                    Check your email — we sent a password reset link to{" "}
+                    Check your email. We sent a password reset link to{" "}
                     <Text style={styles.bodyStrong}>{email}</Text>.
                   </Text>
                   <Text style={styles.bodyDim}>

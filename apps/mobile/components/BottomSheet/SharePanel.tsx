@@ -1,4 +1,4 @@
-import React, { useContext, useMemo, useRef, useState } from "react";
+import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -16,19 +16,18 @@ import {
   getExplrdStats,
   getContinentSummary,
   getCountryCoverage,
-  nextCityMilestone,
 } from "@explrd/shared";
-import type { SavedPlace } from "@explrd/shared";
+import type { SavedPlace, CommunityComparison } from "@explrd/shared";
 import { SheetScrollContext } from "@/components/Sheet";
+import { fetchCommunityStats } from "@/lib/api";
 import { useSession } from "@/lib/SessionContext";
 import { useProfile } from "@/lib/ProfileContext";
 import PassportCard from "@/components/PassportCard";
-import AnimatedBar from "@/components/AnimatedBar";
+import { hapticSelection } from "@/lib/haptics";
 import { colors } from "@/lib/theme";
 
-// Finite world totals so each meter can show "X of Y" + how much is left.
-const WORLD_COUNTRIES = 195;
-const WORLD_CONTINENTS = 7;
+// Inline lists longer than this collapse to a preview with a "Show all" toggle.
+const FACT_PREVIEW = 4;
 
 type Props = {
   places: SavedPlace[];
@@ -99,13 +98,41 @@ function placeLabel(p: SavedPlace): string {
 function lngDir(lng: number) { return lng >= 0 ? "E" : "W"; }
 function latDir(lat: number) { return lat >= 0 ? "N" : "S"; }
 
+/** "2.3 above the average explorer · avg 7.8" style comparison line. */
+function compareSub(mine: number, avg: number, unit = ""): string {
+  const diff = Math.round((mine - avg) * 10) / 10;
+  if (diff > 0) return `${diff}${unit} above the average explorer · avg ${avg}${unit}`;
+  if (diff < 0) return `${Math.abs(diff)}${unit} below the average explorer · avg ${avg}${unit}`;
+  return `Right on the average · ${avg}${unit}`;
+}
+
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
 export default function SharePanel({ places }: Props) {
-  const { user } = useSession();
+  const { user, session } = useSession();
   const { profile } = useProfile();
   const shotRef = useRef<ViewShotRef>(null);
   const [capturing, setCapturing] = useState(false);
+  const [community, setCommunity] = useState<CommunityComparison | null>(null);
+
+  // How-you-compare data: refetched whenever the user's own footprint changes
+  // (adding a place can move their rank), keyed on places.length to stay cheap.
+  useEffect(() => {
+    const token = session?.access_token;
+    if (!token || places.length === 0) {
+      setCommunity(null);
+      return;
+    }
+    let cancelled = false;
+    fetchCommunityStats(token)
+      .then((data) => {
+        if (!cancelled) setCommunity(data);
+      })
+      .catch((e) => console.warn("SharePanel community stats:", e));
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.access_token, places.length]);
 
   const { onScrollEndDragAtTop, scrollEnabled } = useContext(SheetScrollContext);
 
@@ -193,27 +220,49 @@ export default function SharePanel({ places }: Props) {
 
       {places.length > 0 && (
         <>
-          {/* ── World Explored — sleek progress meters ───────────────────────── */}
-          <SectionHeading>World Explored</SectionHeading>
-          <WorldMeterCard
-            label="Countries"
-            value={stats.uniqueCountries}
-            total={WORLD_COUNTRIES}
-            color="#3b82f6"
-          />
-          <WorldMeterCard
-            label="Continents"
-            value={stats.uniqueContinents}
-            total={WORLD_CONTINENTS}
-            color="#8b5cf6"
-          />
-          <WorldMeterCard
-            label="Cities"
-            value={stats.uniqueCities}
-            total={nextCityMilestone(stats.uniqueCities)}
-            color="#10b981"
-            milestone
-          />
+          {/* ── How you compare ──────────────────────────────────────────────── */}
+          {community?.enoughData && community.you && community.averages && (
+            <>
+              <SectionHeading>How You Compare</SectionHeading>
+
+              <View style={styles.compareHero}>
+                <Text style={styles.compareHeroPct}>Top {community.you.topPercent}%</Text>
+                <Text style={styles.compareHeroSub}>
+                  Ranked #{community.you.rank} of {community.explorerCount} explorers by exploration score
+                </Text>
+              </View>
+
+              <FactRow
+                icon="flag"
+                iconColor="#3b82f6"
+                title="Countries vs the average"
+                value={`${community.you.uniqueCountries} ${community.you.uniqueCountries === 1 ? "country" : "countries"}`}
+                sub={compareSub(community.you.uniqueCountries, community.averages.uniqueCountries)}
+              />
+
+              <FactRow
+                icon="earth"
+                iconColor="#8b5cf6"
+                title="World explored vs the average"
+                value={`${community.you.percentWorldTraveled}% of the world`}
+                sub={compareSub(community.you.percentWorldTraveled, community.averages.percentWorldTraveled, "%")}
+              />
+
+              {community.rarestStamp && (
+                <FactRow
+                  icon="diamond"
+                  iconColor="#f59e0b"
+                  title="Your rarest stamp"
+                  value={[community.rarestStamp.label, community.rarestStamp.country].filter(Boolean).join(", ")}
+                  sub={
+                    community.rarestStamp.otherExplorers === 0
+                      ? "You're the only explorer who's stamped this!"
+                      : `Only ${community.rarestStamp.otherExplorers} other ${community.rarestStamp.otherExplorers === 1 ? "explorer has" : "explorers have"} been here`
+                  }
+                />
+              )}
+            </>
+          )}
 
           {/* ── Highlights ───────────────────────────────────────────────────── */}
           {insights && (
@@ -267,11 +316,7 @@ export default function SharePanel({ places }: Props) {
                   iconColor="#10b981"
                   title="One-hit wonders"
                   value={`${insights.soloCountries.length} ${insights.soloCountries.length === 1 ? "country" : "countries"}`}
-                  sub={
-                    insights.soloCountries.length <= 4
-                      ? insights.soloCountries.join(" • ")
-                      : `${insights.soloCountries.slice(0, 4).join(" • ")} + ${insights.soloCountries.length - 4} more`
-                  }
+                  items={insights.soloCountries}
                 />
               )}
 
@@ -281,7 +326,7 @@ export default function SharePanel({ places }: Props) {
                   iconColor="#8b5cf6"
                   title="Continents still to explore"
                   value={`${insights.unvisited.length} remaining`}
-                  sub={insights.unvisited.join(" • ")}
+                  items={insights.unvisited}
                 />
               )}
 
@@ -291,7 +336,7 @@ export default function SharePanel({ places }: Props) {
                   iconColor="#3b82f6"
                   title="All-continent achiever"
                   value="Every continent visited!"
-                  sub="You've set foot on all 7 continents — incredible."
+                  sub="You've set foot on all 7 continents. Incredible."
                 />
               )}
             </>
@@ -339,7 +384,7 @@ export default function SharePanel({ places }: Props) {
           {places.length > 0 && (
             <>
               <SectionHeading>Recent Stamps</SectionHeading>
-              {places.slice(0, 8).map((p) => (
+              {places.slice(0, 3).map((p) => (
                 <View key={p.place_id} style={styles.recentRow}>
                   <View style={styles.recentDot} />
                   <View style={{ flex: 1 }}>
@@ -366,46 +411,6 @@ function SectionHeading({ children }: { children: React.ReactNode }) {
   return <Text style={styles.sectionHeading}>{children}</Text>;
 }
 
-function WorldMeterCard({
-  label,
-  value,
-  total,
-  color,
-  milestone = false,
-}: {
-  label: string;
-  value: number;
-  total: number;
-  color: string;
-  /** Cities: `total` is a rolling milestone, not a world ceiling — labelled so. */
-  milestone?: boolean;
-}) {
-  const pct = Math.min((value / total) * 100, 100);
-  const left = Math.max(total - value, 0);
-
-  return (
-    <View style={styles.meterCard}>
-      <View style={styles.meterCardTop}>
-        <Text style={styles.meterCardLabel}>{label}</Text>
-        <Text style={styles.meterCardValue}>
-          {value}
-          {milestone ? null : <Text style={styles.meterCardTotal}> / {total}</Text>}
-        </Text>
-      </View>
-      <AnimatedBar pct={pct} height={8} fillColor={color} trackColor="#eceef1" />
-      <Text style={styles.meterCardSub}>
-        {milestone
-          ? left > 0
-            ? `${left} to your next milestone · ${total}`
-            : "Milestone reached 🎉"
-          : left > 0
-            ? `${left} to go`
-            : "Every one explored 🎉"}
-      </Text>
-    </View>
-  );
-}
-
 function HighlightCard({ icon, color, label, value, sub }: {
   icon: string;
   color: string;
@@ -425,13 +430,21 @@ function HighlightCard({ icon, color, label, value, sub }: {
   );
 }
 
-function FactRow({ icon, iconColor, title, value, sub }: {
+function FactRow({ icon, iconColor, title, value, sub, items }: {
   icon: string;
   iconColor: string;
   title: string;
   value: string;
   sub?: string;
+  /** Optional list shown beneath the value; collapses to a preview with a
+   *  "Show all" toggle when it has more than FACT_PREVIEW entries. */
+  items?: string[];
 }) {
+  const [expanded, setExpanded] = useState(false);
+  const list = items ?? [];
+  const canExpand = list.length > FACT_PREVIEW;
+  const shown = expanded || !canExpand ? list : list.slice(0, FACT_PREVIEW);
+
   return (
     <View style={styles.factRow}>
       <View style={[styles.factIconWrap, { backgroundColor: iconColor + "18" }]}>
@@ -441,6 +454,23 @@ function FactRow({ icon, iconColor, title, value, sub }: {
         <Text style={styles.factTitle}>{title}</Text>
         <Text style={styles.factValue}>{value}</Text>
         {sub && <Text style={styles.factSub} numberOfLines={2}>{sub}</Text>}
+        {list.length > 0 ? (
+          <Text style={styles.factSub}>{shown.join(" • ")}</Text>
+        ) : null}
+        {canExpand ? (
+          <TouchableOpacity
+            onPress={() => {
+              hapticSelection();
+              setExpanded((v) => !v);
+            }}
+            activeOpacity={0.7}
+            hitSlop={6}
+          >
+            <Text style={styles.factToggle}>
+              {expanded ? "Show less" : `Show all ${list.length}`}
+            </Text>
+          </TouchableOpacity>
+        ) : null}
       </View>
     </View>
   );
@@ -474,31 +504,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.blueSoft,
   },
   shareBtnText: { fontSize: 15, fontWeight: "700", color: colors.blue },
-
-  // World Explored meter cards
-  meterCard: {
-    backgroundColor: "#ffffff",
-    borderRadius: 16,
-    padding: 16,
-    marginBottom: 10,
-    borderWidth: 1,
-    borderColor: "#f0f1f2",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.04,
-    shadowRadius: 4,
-    elevation: 2,
-  },
-  meterCardTop: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    marginBottom: 11,
-  },
-  meterCardLabel: { fontSize: 15, fontWeight: "700", color: "#111214", letterSpacing: -0.2 },
-  meterCardValue: { fontSize: 17, fontWeight: "800", color: "#111214", letterSpacing: -0.3 },
-  meterCardTotal: { fontSize: 14, fontWeight: "600", color: "#a0a7b0" },
-  meterCardSub: { fontSize: 11, color: "#868c94", marginTop: 8, fontWeight: "500" },
 
   // Empty
   emptyBox: {
@@ -649,6 +654,24 @@ const styles = StyleSheet.create({
   },
   factValue: { fontSize: 15, fontWeight: "700", color: "#111214" },
   factSub: { fontSize: 12, color: "#868c94", marginTop: 3, lineHeight: 17 },
+  factToggle: { fontSize: 12, fontWeight: "700", color: colors.blue, marginTop: 6 },
+
+  // How you compare — hero rank card
+  compareHero: {
+    backgroundColor: colors.blueSoft,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 10,
+    alignItems: "center",
+  },
+  compareHeroPct: { fontSize: 30, fontWeight: "800", color: colors.blue },
+  compareHeroSub: {
+    fontSize: 12,
+    color: "#5a6472",
+    marginTop: 4,
+    textAlign: "center",
+    lineHeight: 17,
+  },
 
   // Continent rows
   continentRow: {

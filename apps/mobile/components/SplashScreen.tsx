@@ -1,167 +1,109 @@
 import React, { useEffect, useRef } from "react";
-import { Animated, StyleSheet, View } from "react-native";
+import { Animated, Easing, StyleSheet, View } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
-import { gradients } from "@/lib/theme";
+import GlobeProgress from "@/components/GlobeProgress";
 
 type Props = {
   opacity: Animated.Value;
 };
 
+const ACCENT = "#3b82f6";
+const TRACK = 132;
+const SEG = 46;
+
 export default function SplashScreen({ opacity }: Props) {
-  const wordmarkY   = useRef(new Animated.Value(28)).current;
-  const wordmarkOp  = useRef(new Animated.Value(0)).current;
-  const taglineOp   = useRef(new Animated.Value(0)).current;
-  const dot1        = useRef(new Animated.Value(0)).current;
-  const dot2        = useRef(new Animated.Value(0)).current;
-  const dot3        = useRef(new Animated.Value(0)).current;
+  const riseY = useRef(new Animated.Value(20)).current;
+  const markOp = useRef(new Animated.Value(0)).current;
+  const taglineOp = useRef(new Animated.Value(0)).current;
+  const slide = useRef(new Animated.Value(0)).current;
 
   useEffect(() => {
-    // ── Entrance: wordmark springs up, then tagline fades in
+    // Entrance: globe + wordmark rise and fade in together, then the tagline.
     Animated.sequence([
       Animated.delay(100),
       Animated.parallel([
-        Animated.spring(wordmarkY, {
-          toValue: 0,
-          tension: 52,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-        Animated.timing(wordmarkOp, {
-          toValue: 1,
-          duration: 400,
-          useNativeDriver: true,
-        }),
+        Animated.spring(riseY, { toValue: 0, tension: 54, friction: 9, useNativeDriver: true }),
+        Animated.timing(markOp, { toValue: 1, duration: 420, useNativeDriver: true }),
       ]),
-      Animated.delay(60),
-      Animated.timing(taglineOp, {
-        toValue: 1,
-        duration: 380,
-        useNativeDriver: true,
-      }),
+      Animated.delay(80),
+      Animated.timing(taglineOp, { toValue: 1, duration: 360, useNativeDriver: true }),
     ]).start();
 
-    // ── Three-dot stagger loop, starts after entrance settles
-    const makeDot = (anim: Animated.Value) =>
-      Animated.sequence([
-        Animated.timing(anim, { toValue: 1, duration: 260, useNativeDriver: true }),
-        Animated.timing(anim, { toValue: 0.25, duration: 260, useNativeDriver: true }),
-      ]);
-
+    // Sleek indeterminate bar that sweeps left → right on a loop.
     const loop = Animated.loop(
-      Animated.stagger(160, [makeDot(dot1), makeDot(dot2), makeDot(dot3)]),
+      Animated.timing(slide, {
+        toValue: 1,
+        duration: 1150,
+        easing: Easing.inOut(Easing.cubic),
+        useNativeDriver: true,
+      })
     );
-    const t = setTimeout(() => loop.start(), 780);
+    const t = setTimeout(() => loop.start(), 700);
     return () => {
       clearTimeout(t);
       loop.stop();
     };
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  const segX = slide.interpolate({ inputRange: [0, 1], outputRange: [-SEG, TRACK] });
+
   return (
     <Animated.View style={[StyleSheet.absoluteFill, { opacity }]}>
       <LinearGradient
-        colors={gradients.passport}
-        start={{ x: 0.15, y: 0 }}
-        end={{ x: 0.85, y: 1 }}
+        colors={["#1a2238", "#0d1120"]}
+        start={{ x: 0, y: 0 }}
+        end={{ x: 1, y: 1 }}
         style={StyleSheet.absoluteFill}
       />
 
-      {/* Ambient glow blobs — match PassportCard aesthetic */}
-      <View style={styles.blobGold} />
-      <View style={styles.blobCyan} />
-      <View style={styles.blobWhite} />
-
-      {/* Wordmark + tagline */}
       <View style={styles.center}>
-        <Animated.Text
-          style={[
-            styles.wordmark,
-            { opacity: wordmarkOp, transform: [{ translateY: wordmarkY }] },
-          ]}
+        <Animated.View
+          style={{ alignItems: "center", opacity: markOp, transform: [{ translateY: riseY }] }}
         >
-          explrd
-        </Animated.Text>
+          <GlobeProgress percent={0} size={82} strokeColor="rgba(255,255,255,0.92)" strokeWidth={2.4} />
+          <View style={styles.gap} />
+          <Animated.Text style={styles.wordmark}>explrd</Animated.Text>
+        </Animated.View>
 
         <Animated.Text style={[styles.tagline, { opacity: taglineOp }]}>
-          Keep Exploring.
+          Keep exploring
         </Animated.Text>
       </View>
 
-      {/* Three-dot loading indicator */}
-      <View style={styles.dotsRow}>
-        {([dot1, dot2, dot3] as Animated.Value[]).map((anim, i) => (
-          <Animated.View key={i} style={[styles.dot, { opacity: anim }]} />
-        ))}
+      {/* Indeterminate loading bar */}
+      <View style={styles.loaderTrack}>
+        <Animated.View style={[styles.loaderSeg, { transform: [{ translateX: segX }] }]} />
       </View>
     </Animated.View>
   );
 }
 
 const styles = StyleSheet.create({
-  // ── Glow blobs ─────────────────────────────────────────────────────────────
-  blobGold: {
-    position: "absolute",
-    top: -140,
-    right: -140,
-    width: 360,
-    height: 360,
-    borderRadius: 180,
-    backgroundColor: "rgba(247,207,98,0.14)",
-  },
-  blobCyan: {
-    position: "absolute",
-    bottom: -100,
-    left: -100,
-    width: 300,
-    height: 300,
-    borderRadius: 150,
-    backgroundColor: "rgba(114,197,255,0.11)",
-  },
-  blobWhite: {
-    position: "absolute",
-    top: "38%",
-    left: "20%",
-    width: "60%",
-    height: 80,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.04)",
-  },
-
-  // ── Content ────────────────────────────────────────────────────────────────
-  center: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingBottom: 48,
-  },
-  wordmark: {
-    fontSize: 56,
-    fontWeight: "800",
-    color: "#ffffff",
-    letterSpacing: -2.5,
-  },
+  center: { flex: 1, alignItems: "center", justifyContent: "center", paddingBottom: 40 },
+  gap: { height: 22 },
+  wordmark: { fontSize: 46, fontWeight: "700", color: "#ffffff", letterSpacing: -2 },
   tagline: {
-    marginTop: 10,
-    fontSize: 15,
-    fontWeight: "400",
-    color: "rgba(255,255,255,0.45)",
-    letterSpacing: 0.4,
+    marginTop: 14,
+    fontSize: 14,
+    fontWeight: "500",
+    color: "rgba(255,255,255,0.4)",
+    letterSpacing: 0.3,
   },
 
-  // ── Dots ───────────────────────────────────────────────────────────────────
-  dotsRow: {
+  loaderTrack: {
     position: "absolute",
-    bottom: 68,
-    left: 0,
-    right: 0,
-    flexDirection: "row",
-    justifyContent: "center",
-    gap: 8,
+    bottom: 72,
+    alignSelf: "center",
+    width: TRACK,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: "rgba(255,255,255,0.10)",
+    overflow: "hidden",
   },
-  dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 2.5,
-    backgroundColor: "rgba(255,255,255,0.55)",
+  loaderSeg: {
+    width: SEG,
+    height: 3,
+    borderRadius: 1.5,
+    backgroundColor: ACCENT,
   },
 });

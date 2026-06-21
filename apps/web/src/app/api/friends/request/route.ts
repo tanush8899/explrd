@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { validateUsername } from "@explrd/shared";
 import { getAuthedUser, serverError } from "@/lib/api-auth";
+import { sendPushToUsers, displayLabelFor } from "@/lib/push";
 
 export const runtime = "nodejs";
 
@@ -100,6 +101,13 @@ export async function POST(req: Request) {
             { status: 500 },
           );
         }
+        // Their pending request to me just became a friendship — tell them.
+        const meLabel = await displayLabelFor(supabase, me);
+        await sendPushToUsers(supabase, [other], {
+          title: "You're now friends 🎉",
+          body: `${meLabel} accepted your friend request`,
+          data: { type: "friend_accept", screen: "friends" },
+        });
         return NextResponse.json({ status: "accepted" });
       }
       // A previously rejected row exists — clear it so we can request fresh.
@@ -117,6 +125,14 @@ export async function POST(req: Request) {
         { status: 500 },
       );
     }
+
+    // Notify the recipient of the incoming request.
+    const meLabel = await displayLabelFor(supabase, me);
+    await sendPushToUsers(supabase, [other], {
+      title: "New friend request",
+      body: `${meLabel} sent you a friend request`,
+      data: { type: "friend_request", screen: "friends" },
+    });
 
     return NextResponse.json({ status: "pending" });
   } catch (e) {

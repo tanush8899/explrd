@@ -56,6 +56,13 @@ const config = {
     "expo-sharing",
     "expo-status-bar",
     "expo-web-browser",
+    [
+      "expo-notifications",
+      {
+        // Tints the notification on Android; uses the default icon for now.
+        color: "#007aff",
+      },
+    ],
   ],
   experiments: {
     typedRoutes: true,

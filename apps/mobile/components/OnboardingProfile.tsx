@@ -170,7 +170,7 @@ export default function OnboardingProfile() {
                   ? avail.reason
                   : avail.kind === "ok"
                     ? "That username is available."
-                    : "Letters, numbers, _ and . — 3–20 characters."}
+                    : "Letters, numbers, _ and . (3–20 characters)."}
               </Text>
             </View>
 

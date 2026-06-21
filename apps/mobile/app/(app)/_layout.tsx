@@ -4,6 +4,8 @@ import { Redirect, Stack } from "expo-router";
 import { useSession } from "@/lib/SessionContext";
 import { useProfile } from "@/lib/ProfileContext";
 import { usePlaces } from "@/lib/PlacesContext";
+import { useFriends } from "@/lib/FriendsContext";
+import { usePushNotifications } from "@/lib/notifications";
 import { usePhotoOnboardingGate } from "@/lib/photoOnboarding";
 import SplashScreen from "@/components/SplashScreen";
 import OnboardingProfile from "@/components/OnboardingProfile";
@@ -13,9 +15,16 @@ import PhotoSyncView from "@/components/photos/PhotoSyncView";
 const MIN_SPLASH_MS = 1400;
 
 export default function AppLayout() {
-  const { loading: sessionLoading, user } = useSession();
+  const { loading: sessionLoading, user, session } = useSession();
   const { loading: profileLoading, needsUsername } = useProfile();
   const { loading: placesLoading } = usePlaces();
+  const { refresh: refreshFriends } = useFriends();
+
+  // Register for push once signed in; refresh the social graph when a friend
+  // notification lands so the in-app badge/list stays in sync with the alert.
+  usePushNotifications(session?.access_token ?? null, () => {
+    void refreshFriends();
+  });
 
   // One-time "import places from your photos" step, sequenced after the username
   // step. Only evaluated once the user is signed in with a username set.

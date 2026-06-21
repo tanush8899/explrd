@@ -1,4 +1,4 @@
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { View, Keyboard, Alert, Dimensions, StyleSheet } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Sheet, { type SheetHandle, type AvatarAnchor } from "@/components/Sheet";
@@ -16,6 +16,7 @@ import ProfilePanel from "@/components/BottomSheet/ProfilePanel";
 import PlacesMap, { type PreviewCoord, type FriendOverlay } from "@/components/PlacesMap";
 import { useFriends } from "@/lib/FriendsContext";
 import AvatarMenu from "@/components/AvatarMenu";
+import CityNoteSheet from "@/components/CityNoteSheet";
 import { signOut } from "@/lib/auth";
 import BottomNav, { type NavTab } from "@/components/BottomNav";
 import PassportStamp from "@/components/PassportStamp";
@@ -45,8 +46,8 @@ const SHEET_FULL = Math.round(SCREEN_H * 0.9);
 export default function MainScreen() {
   const { user } = useSession();
   const { profile } = useProfile();
-  const { places, setPlaces, refresh, deletePlace } = usePlaces();
-  const { selectedData: friendData, mapFilter, incoming } = useFriends();
+  const { places, setPlaces, refresh, deletePlace, updateNotes } = usePlaces();
+  const { selectedData: friendData, mapFilter, incoming, selectedId, selectFriend } = useFriends();
   const insets = useSafeAreaInsets();
   const sheetRef = useRef<SheetHandle>(null);
 
@@ -54,6 +55,7 @@ export default function MainScreen() {
   const [deletingId, setDeletingId]     = useState<string | null>(null);
   const [previewCoord, setPreviewCoord] = useState<PreviewCoord | null>(null);
   const [stampPlace, setStampPlace]     = useState<SavedPlace | null>(null);
+  const [notesPlace, setNotesPlace]     = useState<SavedPlace | null>(null);
   const [menuOpen, setMenuOpen]         = useState(false);
   const [menuAnchor, setMenuAnchor]     = useState<AvatarAnchor | null>(null);
   const [sheetSnap, setSheetSnap]       = useState<0 | 1 | 2>(1);
@@ -64,12 +66,13 @@ export default function MainScreen() {
   // resting on. The sheet sits BOTTOM_GAP (12px) off the bottom in pill/mid and
   // flush in full; add a small gap so the logo clears the edge without floating.
   const mapBottomInset = useMemo(() => {
-    const pillHeight = 64 + Math.max(0, insets.bottom - 12);
+    // Must match Sheet's PILL_CONTENT (collapsed pill height sans safe inset).
+    const pillHeight = 78 + Math.max(0, insets.bottom - 12);
     const heights = [pillHeight, SHEET_MID, SHEET_FULL];
     const cardBottom = [12, 12, 0];
     // iOS floats the attribution ~25px above the layout margin, so sit the
     // margin well below the sheet's top edge — the logo lands just above it.
-    return heights[sheetSnap] + cardBottom[sheetSnap] - 34;
+    return heights[sheetSnap] + cardBottom[sheetSnap] - 28;
   }, [sheetSnap, insets.bottom]);
 
   // Tab to return to when the profile panel is closed.
@@ -126,10 +129,26 @@ export default function MainScreen() {
     ]);
   }, []);
 
+  // Selecting a friend lights up their globe — drop the sheet to the mid stop so
+  // the map is actually visible instead of hidden behind the panel.
+  useEffect(() => {
+    if (activeTab === "friends" && selectedId) {
+      sheetRef.current?.snapTo(1);
+    }
+  }, [selectedId, activeTab]);
+
   // ── Nav ───────────────────────────────────────────────────────────────────────
-  const handleNavTabPress = useCallback((tab: NavTab) => {
-    setActiveTab(tab);
-  }, []);
+  const handleNavTabPress = useCallback(
+    (tab: NavTab) => {
+      // Leaving the friends tab clears the selected friend so their globe overlay
+      // doesn't linger on the map.
+      if (activeTabRef.current === "friends" && tab !== "friends") {
+        selectFriend(null);
+      }
+      setActiveTab(tab);
+    },
+    [selectFriend],
+  );
 
   const handleAddPress = useCallback(() => {
     setActiveTab("add");
@@ -220,6 +239,11 @@ export default function MainScreen() {
     [deletePlace, deletingId],
   );
 
+  const openNotes = useCallback((place: SavedPlace) => {
+    hapticSelection();
+    setNotesPlace(place);
+  }, []);
+
   const navActiveTab: NavTab =
     activeTab === "add" ? "places" : (activeTab as NavTab);
 
@@ -239,6 +263,7 @@ export default function MainScreen() {
         places={places}
         previewCoord={previewCoord}
         friendOverlay={friendOverlay}
+        onSelectCity={openNotes}
         bottomInset={mapBottomInset}
       />
 
@@ -270,6 +295,7 @@ export default function MainScreen() {
           <MyPlacesPanel
             places={places}
             onDelete={handleDelete}
+            onEditNotes={openNotes}
             deletingId={deletingId}
             displayName={displayName}
           />
@@ -303,6 +329,13 @@ export default function MainScreen() {
           }}
         />
       )}
+
+      <CityNoteSheet
+        place={notesPlace}
+        onClose={() => setNotesPlace(null)}
+        onSave={updateNotes}
+        onDelete={handleDelete}
+      />
 
       <AvatarMenu
         visible={menuOpen}

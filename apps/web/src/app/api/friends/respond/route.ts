@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getAuthedUser, serverError } from "@/lib/api-auth";
+import { sendPushToUsers, displayLabelFor } from "@/lib/push";
 
 export const runtime = "nodejs";
 
@@ -30,9 +31,9 @@ export async function POST(req: Request) {
 
     const { data: row, error: rowErr } = await supabase
       .from("friend_requests")
-      .select("id, addressee_id, status")
+      .select("id, requester_id, addressee_id, status")
       .eq("id", requestId)
-      .maybeSingle<{ id: string; addressee_id: string; status: string }>();
+      .maybeSingle<{ id: string; requester_id: string; addressee_id: string; status: string }>();
 
     if (rowErr) {
       return NextResponse.json(
@@ -58,6 +59,13 @@ export async function POST(req: Request) {
           { status: 500 },
         );
       }
+      // Tell the original requester their request was accepted.
+      const meLabel = await displayLabelFor(supabase, me);
+      await sendPushToUsers(supabase, [row.requester_id], {
+        title: "You're now friends 🎉",
+        body: `${meLabel} accepted your friend request`,
+        data: { type: "friend_accept", screen: "friends" },
+      });
       return NextResponse.json({ status: "accepted" });
     }
 

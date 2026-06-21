@@ -140,6 +140,7 @@ export default function AddPlacePanel({
         lat: selected.lat,
         lng: selected.lng,
         formatted: selected.display_name,
+        notes: null,
         city: null,
         state: null,
         country: null,
@@ -291,7 +292,7 @@ export default function AddPlacePanel({
         }
       }}
     >
-      <Text style={styles.subtitle}>Search a city or landmark — only cities can be added</Text>
+      <Text style={styles.subtitle}>Search a city or landmark. Only cities can be added</Text>
 
       {/* Search input — Flighty's flat grey capsule field */}
       <View style={styles.inputRow}>

@@ -164,6 +164,7 @@ export default function PhotoSyncView({ mode, onClose }: Props) {
             lat: city.lat,
             lng: city.lng,
             formatted: city.display_name,
+            notes: null,
             city: null,
             state: null,
             country: null,

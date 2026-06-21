@@ -3,12 +3,13 @@ import { View, Text, StyleSheet } from "react-native";
 import { LinearGradient } from "expo-linear-gradient";
 import ViewShot, { type ViewShotRef } from "react-native-view-shot";
 import type { ExplrdStats } from "@explrd/shared";
-import { gradients } from "@/lib/theme";
 
 export type PassportCardProps = {
   displayName: string;
   stats: ExplrdStats;
 };
+
+const ACCENT = "#3b82f6";
 
 // forwardRef so SharePanel can call .capture() on the ViewShot inside
 const PassportCard = forwardRef<ViewShotRef, PassportCardProps>(
@@ -16,7 +17,7 @@ const PassportCard = forwardRef<ViewShotRef, PassportCardProps>(
     // Keep one decimal — "4.9%" not a rounded "5%".
     const pct = Math.min(stats.percentWorldTraveled, 100);
     const today = new Date().toLocaleDateString("en-US", {
-      month: "long",
+      month: "short",
       day: "numeric",
       year: "numeric",
     });
@@ -24,61 +25,39 @@ const PassportCard = forwardRef<ViewShotRef, PassportCardProps>(
     return (
       <ViewShot ref={ref} options={{ format: "png", quality: 1 }}>
         <LinearGradient
-          colors={gradients.passport}
-          start={{ x: 0.15, y: 0 }}
-          end={{ x: 0.85, y: 1 }}
+          colors={["#1a2238", "#0d1120"]}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 1 }}
           style={styles.card}
         >
-          {/* Decorative glow blobs */}
-          <View style={styles.blobGold} />
-          <View style={styles.blobCyan} />
-          <View style={styles.blobWhite} />
-
           {/* Header */}
           <View style={styles.headerRow}>
-            <Text style={styles.headerLeft}>EXPLRD PASSPORT</Text>
-            <Text style={styles.headerRight}>{today}</Text>
-          </View>
-          <View style={styles.divider} />
-
-          {/* Explorer label + name */}
-          <View style={styles.nameSection}>
-            <Text style={styles.eyebrow}>EXPLORER</Text>
-            <Text style={styles.displayName} numberOfLines={2}>
-              {displayName}
-            </Text>
+            <Text style={styles.kicker}>EXPLRD PASSPORT</Text>
+            <Text style={styles.date}>{today}</Text>
           </View>
 
-          {/* World explored box */}
-          <View style={styles.worldBox}>
-            <View style={styles.worldBoxHeader}>
-              <Text style={styles.worldPct}>{pct}%</Text>
-              <View style={styles.worldBadge}>
-                <Text style={styles.worldBadgeText}>WORLD EXPLORED</Text>
-              </View>
+          {/* Name */}
+          <Text style={styles.displayName} numberOfLines={1}>
+            {displayName}
+          </Text>
+
+          {/* World explored */}
+          <View>
+            <View style={styles.pctRow}>
+              <Text style={styles.pct}>{pct}</Text>
+              <Text style={styles.pctSign}>%</Text>
+              <Text style={styles.pctLabel}>world explored</Text>
             </View>
-            <View style={styles.progressTrack}>
-              <LinearGradient
-                colors={["#f7cf62", "#f2a8ff", "#76d5ff"]}
-                start={{ x: 0, y: 0 }}
-                end={{ x: 1, y: 0 }}
-                style={[styles.progressFill, { width: `${pct}%` }]}
-              />
+            <View style={styles.track}>
+              <View style={[styles.fill, { width: `${pct}%` }]} />
             </View>
           </View>
 
-          {/* Stats row */}
+          {/* Stats */}
           <View style={styles.statsRow}>
-            <StatChip label="CITIES" value={stats.uniqueCities} />
-            <StatChip label="COUNTRIES" value={stats.uniqueCountries} />
-            <StatChip label="CONTINENTS" value={stats.uniqueContinents} />
-          </View>
-
-          {/* Footer */}
-          <View style={styles.divider} />
-          <View style={styles.footerRow}>
-            <Text style={styles.footerLeft}>explrd</Text>
-            <Text style={styles.footerRight}>Keep Exploring</Text>
+            <Stat label="Cities" value={stats.uniqueCities} />
+            <Stat label="Countries" value={stats.uniqueCountries} />
+            <Stat label="Continents" value={stats.uniqueContinents} />
           </View>
         </LinearGradient>
       </ViewShot>
@@ -91,9 +70,9 @@ export default PassportCard;
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
-function StatChip({ label, value }: { label: string; value: number }) {
+function Stat({ label, value }: { label: string; value: number }) {
   return (
-    <View style={styles.statChip}>
+    <View style={styles.stat}>
       <Text style={styles.statValue}>{value}</Text>
       <Text style={styles.statLabel}>{label}</Text>
     </View>
@@ -102,174 +81,47 @@ function StatChip({ label, value }: { label: string; value: number }) {
 
 // ─── Styles ──────────────────────────────────────────────────────────────────
 
+const WHITE = "#ffffff";
+const W55 = "rgba(255,255,255,0.55)";
+const W40 = "rgba(255,255,255,0.4)";
+
 const styles = StyleSheet.create({
   card: {
-    borderRadius: 20,
-    padding: 20,
+    borderRadius: 22,
+    padding: 24,
     overflow: "hidden",
     width: "100%",
-    aspectRatio: 1.58,
+    aspectRatio: 1.62,
+    // Even vertical rhythm: four sections, equal gaps between them.
     justifyContent: "space-between",
-  },
-
-  // Glow blobs
-  blobGold: {
-    position: "absolute",
-    top: -80,
-    right: -80,
-    width: 200,
-    height: 200,
-    borderRadius: 100,
-    backgroundColor: "rgba(247,207,98,0.28)",
-  },
-  blobCyan: {
-    position: "absolute",
-    top: -60,
-    left: -60,
-    width: 160,
-    height: 160,
-    borderRadius: 80,
-    backgroundColor: "rgba(114,197,255,0.18)",
-  },
-  blobWhite: {
-    position: "absolute",
-    top: 0,
-    left: "25%",
-    width: "50%",
-    height: 56,
-    borderRadius: 999,
-    backgroundColor: "rgba(255,255,255,0.10)",
+    borderWidth: 1,
+    borderColor: "rgba(255,255,255,0.06)",
   },
 
   // Header
-  headerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
-  headerLeft: {
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 2,
-    color: "rgba(255,255,255,0.6)",
-  },
-  headerRight: {
-    fontSize: 9,
-    color: "rgba(255,255,255,0.45)",
-  },
-  divider: {
-    height: 1,
-    backgroundColor: "rgba(255,255,255,0.12)",
-    marginVertical: 8,
-  },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center" },
+  kicker: { fontSize: 11, fontWeight: "600", letterSpacing: 2.8, color: W40 },
+  date: { fontSize: 12, fontWeight: "500", color: W40 },
 
   // Name
-  nameSection: {
-    marginVertical: 4,
-  },
-  eyebrow: {
-    fontSize: 10,
-    fontWeight: "700",
-    letterSpacing: 2,
-    color: "rgba(255,255,255,0.6)",
-    marginBottom: 4,
-  },
-  displayName: {
-    fontSize: 26,
-    fontWeight: "800",
-    letterSpacing: -1,
-    color: "#ffffff",
-  },
+  displayName: { fontSize: 27, fontWeight: "600", letterSpacing: -0.5, color: WHITE },
 
   // World explored
-  worldBox: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.12)",
-    borderRadius: 12,
-    padding: 12,
-    backgroundColor: "rgba(255,255,255,0.08)",
-    marginVertical: 6,
-  },
-  worldBoxHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 10,
-  },
-  worldPct: {
-    fontSize: 20,
-    fontWeight: "800",
-    color: "#ffffff",
-  },
-  worldBadge: {
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.2)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-  },
-  worldBadgeText: {
-    fontSize: 7,
-    fontWeight: "600",
-    letterSpacing: 1.5,
-    color: "rgba(255,255,255,0.7)",
-  },
-  progressTrack: {
-    height: 5,
-    backgroundColor: "rgba(255,255,255,0.1)",
+  pctRow: { flexDirection: "row", alignItems: "flex-end", marginBottom: 14 },
+  pct: { fontSize: 46, fontWeight: "700", letterSpacing: -1.8, color: WHITE, lineHeight: 46 },
+  pctSign: { fontSize: 24, fontWeight: "600", color: W55, marginLeft: 2, marginBottom: 3 },
+  pctLabel: { fontSize: 13, fontWeight: "500", color: W40, marginLeft: 10, marginBottom: 6 },
+  track: {
+    height: 6,
     borderRadius: 3,
+    backgroundColor: "rgba(255,255,255,0.10)",
     overflow: "hidden",
   },
-  progressFill: {
-    height: "100%",
-    borderRadius: 3,
-  },
+  fill: { height: "100%", borderRadius: 3, backgroundColor: ACCENT },
 
   // Stats
-  statsRow: {
-    flexDirection: "row",
-    gap: 8,
-    marginVertical: 4,
-  },
-  statChip: {
-    flex: 1,
-    borderWidth: 1,
-    borderColor: "rgba(255,255,255,0.10)",
-    borderRadius: 10,
-    backgroundColor: "rgba(0,0,0,0.15)",
-    paddingVertical: 8,
-    paddingHorizontal: 4,
-    alignItems: "center",
-  },
-  statValue: {
-    fontSize: 16,
-    fontWeight: "700",
-    color: "#ffffff",
-  },
-  statLabel: {
-    fontSize: 6,
-    fontWeight: "600",
-    letterSpacing: 1,
-    color: "rgba(255,255,255,0.6)",
-    marginTop: 2,
-  },
-
-  // Footer
-  footerRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginTop: 4,
-  },
-  footerLeft: {
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 1,
-    color: "rgba(255,255,255,0.6)",
-  },
-  footerRight: {
-    fontSize: 9,
-    color: "rgba(255,255,255,0.45)",
-  },
+  statsRow: { flexDirection: "row" },
+  stat: { flex: 1, alignItems: "center" },
+  statValue: { fontSize: 22, fontWeight: "700", color: WHITE, letterSpacing: -0.4 },
+  statLabel: { fontSize: 12, fontWeight: "500", color: W40, marginTop: 4 },
 });

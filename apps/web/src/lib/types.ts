@@ -84,3 +84,37 @@ export type PublicProfilePayload = {
   profile: UserProfile;
   places: SavedPlace[];
 };
+
+/** Anonymized comparison of the current explorer against everyone else, from
+ *  /api/community-stats. Only aggregate numbers are exposed — never names or
+ *  individual maps. `enoughData` is false (and the detail fields null) until the
+ *  community is large enough for averages/percentiles to be meaningful. */
+export type CommunityComparison = {
+  enoughData: boolean;
+  explorerCount: number;
+  minExplorers: number;
+  averages: {
+    uniqueCountries: number;
+    uniqueCities: number;
+    uniqueContinents: number;
+    percentWorldTraveled: number;
+    score: number;
+  } | null;
+  you: {
+    /** 1-based rank by explrd score; 1 = most explored. */
+    rank: number;
+    /** e.g. 15 → "top 15% of explorers". */
+    topPercent: number;
+    uniqueCountries: number;
+    uniqueCities: number;
+    uniqueContinents: number;
+    percentWorldTraveled: number;
+    score: number;
+  } | null;
+  rarestStamp: {
+    label: string;
+    country: string | null;
+    /** How many OTHER explorers have also stamped this place. */
+    otherExplorers: number;
+  } | null;
+};

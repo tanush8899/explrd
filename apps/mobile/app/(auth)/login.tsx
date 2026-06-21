@@ -98,7 +98,7 @@ export default function LoginScreen() {
         >
           <View style={styles.content}>
             {/* Logo / wordmark */}
-            <Text style={styles.wordmark}>Explr</Text>
+            <Text style={styles.wordmark}>Explrd</Text>
             <Text style={styles.tagline}>Track every place you've been.</Text>
 
             {/* Glass card */}

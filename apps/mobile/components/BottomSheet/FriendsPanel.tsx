@@ -66,6 +66,51 @@ function topCountry(places: SavedPlace[]): { country: string; count: number } | 
   return best;
 }
 
+// Great-circle distance between two coordinates, in kilometers.
+function haversineKm(
+  a: { lat: number; lng: number },
+  b: { lat: number; lng: number },
+): number {
+  const R = 6371;
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(b.lat - a.lat);
+  const dLng = toRad(b.lng - a.lng);
+  const lat1 = toRad(a.lat);
+  const lat2 = toRad(b.lat);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+
+function centroid(places: SavedPlace[]): { lat: number; lng: number } | null {
+  if (places.length === 0) return null;
+  let lat = 0;
+  let lng = 0;
+  for (const p of places) {
+    lat += p.lat;
+    lng += p.lng;
+  }
+  return { lat: lat / places.length, lng: lng / places.length };
+}
+
+// The single place reaching furthest in a compass direction.
+function extreme(places: SavedPlace[], dir: "n" | "s" | "e" | "w"): SavedPlace | null {
+  if (places.length === 0) return null;
+  return places.reduce((best, p) => {
+    switch (dir) {
+      case "n": return p.lat > best.lat ? p : best;
+      case "s": return p.lat < best.lat ? p : best;
+      case "e": return p.lng > best.lng ? p : best;
+      case "w": return p.lng < best.lng ? p : best;
+    }
+  });
+}
+
+function formatKm(km: number): string {
+  return `${Math.round(km).toLocaleString()} km`;
+}
+
 // ─── Panel ────────────────────────────────────────────────────────────────────
 
 type Props = {
@@ -159,7 +204,7 @@ export default function FriendsPanel({ myPlaces, myDisplayName }: Props) {
       setAddNote(
         status === "accepted"
           ? `You're now friends with ${firstName(nameOf(target))}! 🎉`
-          : `Request sent to ${firstName(nameOf(target))} — waiting on them to accept.`,
+          : `Request sent to ${firstName(nameOf(target))}. Waiting on them to accept.`,
       );
       setSearchQuery("");
       setSearchResults([]);
@@ -550,8 +595,72 @@ function FriendDetail({
         .filter((c): c is string => !!c && myCountries.has(c.toLowerCase())),
     );
     const friendOnly = friendPlaces.filter((p) => !myKeys.has(cityCountryKey(p)));
+
+    // Explrd Match Score — Jaccard overlap of the cities you've both stamped.
+    const friendKeys = new Set(friendPlaces.map(cityCountryKey));
+    const unionKeys = new Set([...myKeys, ...friendKeys]);
+    const intersectionSize = [...friendKeys].filter((k) => myKeys.has(k)).length;
+    const matchScore =
+      unionKeys.size === 0 ? 0 : Math.round((intersectionSize / unionKeys.size) * 100);
+
+    // Combined footprint — what the two of you have covered together.
+    const combinedStats = getExplrdStats([...myPlaces, ...friendPlaces]);
+
+    // Who reached furthest in each compass direction.
+    const wentFurther = ([
+      ["n", "Furthest North"],
+      ["s", "Furthest South"],
+      ["e", "Furthest East"],
+      ["w", "Furthest West"],
+    ] as const)
+      .map(([dir, label]) => {
+        const mine = extreme(myPlaces, dir);
+        const theirs = extreme(friendPlaces, dir);
+        if (!mine && !theirs) return null;
+        let winner: "me" | "friend";
+        let place: SavedPlace;
+        if (!mine) { winner = "friend"; place = theirs!; }
+        else if (!theirs) { winner = "me"; place = mine; }
+        else {
+          const mineWins =
+            dir === "n" ? mine.lat >= theirs.lat
+            : dir === "s" ? mine.lat <= theirs.lat
+            : dir === "e" ? mine.lng >= theirs.lng
+            : mine.lng <= theirs.lng;
+          winner = mineWins ? "me" : "friend";
+          place = mineWins ? mine : theirs;
+        }
+        return { label, winner, place };
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
+
+    // Continents only your friend has set foot on.
+    const myContinents = new Set(
+      myPlaces.map((p) => (p.continent ?? "").trim()).filter(Boolean),
+    );
+    const friendOnlyContinents = [
+      ...new Set(
+        friendPlaces
+          .map((p) => (p.continent ?? "").trim())
+          .filter((c) => c && !myContinents.has(c)),
+      ),
+    ];
+
+    // Rarest shared gem — the place you've both been that's furthest from the
+    // heart of your combined travels.
+    const combinedCentroid = centroid([...myPlaces, ...friendPlaces]);
+    let rarestShared: { place: SavedPlace; km: number } | null = null;
+    if (combinedCentroid) {
+      for (const p of shared) {
+        const km = haversineKm(combinedCentroid, p);
+        if (!rarestShared || km > rarestShared.km) rarestShared = { place: p, km };
+      }
+    }
+
     return {
-      lastPlace: friendPlaces[0] ?? null,
+      // friendPlaces arrives newest-first from the API, so the first few are the
+      // most recently logged stamps.
+      recentPlaces: friendPlaces.slice(0, 3),
       myLastPlace: myPlaces[0] ?? null,
       topCountry: topCountry(friendPlaces),
       myTopCountry: topCountry(myPlaces),
@@ -559,6 +668,11 @@ function FriendDetail({
       sharedCountries: [...sharedCountries],
       friendOnly,
       friendOnlyCount: friendOnly.length,
+      matchScore,
+      combinedStats,
+      wentFurther,
+      friendOnlyContinents,
+      rarestShared,
     };
   }, [friendPlaces, myPlaces]);
 
@@ -622,23 +736,63 @@ function FriendDetail({
           {ahead && (
             <Text style={styles.vsFooter}>
               {ahead === "You"
-                ? `You're ahead — but ${friendFirst} is catching up! 🏃`
-                : `${friendFirst} is ahead — time to book a trip! ✈️`}
+                ? `You're ahead, but ${friendFirst} is catching up! 🏃`
+                : `${friendFirst} is ahead. Time to book a trip! ✈️`}
             </Text>
           )}
         </LinearGradient>
       </View>
 
+      {/* Explrd Match Score — how much of your maps overlap */}
+      <View style={styles.matchCard}>
+        <Text style={styles.matchLabel}>EXPLRD MATCH SCORE</Text>
+        <Text style={styles.matchScore}>{fun.matchScore}%</Text>
+        <View style={styles.matchTrack}>
+          <View style={[styles.matchFill, { width: `${Math.max(fun.matchScore, 2)}%` }]} />
+        </View>
+        <Text style={styles.matchSub}>
+          {fun.matchScore === 0
+            ? `No overlap yet. You and ${friendFirst} have explored totally different corners of the world.`
+            : fun.matchScore >= 50
+              ? `Travel twins! You and ${friendFirst} have stamped a lot of the same places.`
+              : `You and ${friendFirst} share ${fun.matchScore}% of your stamped cities.`}
+        </Text>
+      </View>
+
       {/* Fun fact cards */}
       <Text style={styles.sectionLabel}>FUN FACTS</Text>
 
-      {fun.lastPlace && (
-        <FactCard
-          icon="footsteps"
-          title={`${friendFirst}'s latest stamp`}
-          big={placeLabel(fun.lastPlace)}
-          sub={[fun.lastPlace.state, fun.lastPlace.country].filter(Boolean).join(", ")}
-        />
+      <FactCard
+        icon="planet"
+        title="Together you've covered"
+        big={`${fun.combinedStats.percentWorldTraveled}% of the world`}
+        sub={`Together across ${fun.combinedStats.uniqueCountries} ${
+          fun.combinedStats.uniqueCountries === 1 ? "country" : "countries"
+        } · ${fun.combinedStats.uniqueContinents}/7 continents · ${fun.combinedStats.uniqueCities} cities`}
+      />
+
+      {fun.recentPlaces.length > 0 && (
+        <View style={styles.factCard}>
+          <View style={styles.factIconWrap}>
+            <Ionicons name="footsteps" size={18} color={colors.blue} />
+          </View>
+          <View style={styles.factBody}>
+            <Text style={styles.factTitle}>{`${friendFirst}'s recent stamps`}</Text>
+            {fun.recentPlaces.map((p, i) => (
+              <View
+                key={p.place_id}
+                style={[styles.stampRow, i > 0 && styles.stampRowDivider]}
+              >
+                <Text style={styles.stampCity} numberOfLines={1}>
+                  {placeLabel(p)}
+                </Text>
+                <Text style={styles.stampRegion} numberOfLines={1}>
+                  {[p.state, p.country].filter(Boolean).join(", ")}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
       )}
 
       {fun.topCountry && (
@@ -647,7 +801,7 @@ function FriendDetail({
           title={`${friendFirst}'s most explored country`}
           big={fun.topCountry.country}
           sub={`${fun.topCountry.count} ${fun.topCountry.count === 1 ? "place" : "places"} stamped${
-            fun.myTopCountry ? ` — yours is ${fun.myTopCountry.country}` : ""
+            fun.myTopCountry ? `, yours is ${fun.myTopCountry.country}` : ""
           }`}
         />
       )}
@@ -677,6 +831,54 @@ function FriendDetail({
         />
       )}
 
+      {fun.wentFurther.length > 0 && (
+        <View style={styles.factCard}>
+          <View style={styles.factIconWrap}>
+            <Ionicons name="navigate" size={18} color={colors.blue} />
+          </View>
+          <View style={styles.factBody}>
+            <Text style={styles.factTitle}>Who went further</Text>
+            {fun.wentFurther.map((w, i) => (
+              <View
+                key={w.label}
+                style={[styles.stampRow, i > 0 && styles.stampRowDivider]}
+              >
+                <Text style={styles.stampCity} numberOfLines={1}>
+                  {w.label} · {w.winner === "me" ? "You" : friendFirst}
+                </Text>
+                <Text style={styles.stampRegion} numberOfLines={1}>
+                  {[placeLabel(w.place), w.place.country].filter(Boolean).join(", ")}
+                </Text>
+              </View>
+            ))}
+          </View>
+        </View>
+      )}
+
+      {fun.friendOnlyContinents.length > 0 && (
+        <FactCard
+          icon="compass"
+          title={`Continents only ${friendFirst} has touched`}
+          big={`${fun.friendOnlyContinents.length} ${
+            fun.friendOnlyContinents.length === 1 ? "continent" : "continents"
+          }`}
+          items={fun.friendOnlyContinents}
+        />
+      )}
+
+      {fun.rarestShared && (
+        <FactCard
+          icon="diamond"
+          title="Rarest shared gem"
+          big={[placeLabel(fun.rarestShared.place), fun.rarestShared.place.country]
+            .filter(Boolean)
+            .join(", ")}
+          sub={`The most off-grid place you've both stamped, ${formatKm(
+            fun.rarestShared.km,
+          )} from the heart of your travels.`}
+        />
+      )}
+
       {fun.friendOnlyCount > 0 && (
         <FactCard
           icon="bulb"
@@ -684,7 +886,7 @@ function FriendDetail({
           big={`${fun.friendOnlyCount} new ${fun.friendOnlyCount === 1 ? "idea" : "ideas"}`}
           sub={`${friendFirst} has been ${
             fun.friendOnlyCount === 1 ? "somewhere" : "places"
-          } you haven't — ask them where to go next!`}
+          } you haven't. Ask them where to go next!`}
           items={fun.friendOnly.map(placeLabel)}
         />
       )}
@@ -1096,4 +1298,58 @@ const styles = StyleSheet.create({
     color: colors.blue,
     marginTop: 6,
   },
+
+  // Explrd Match Score
+  matchCard: {
+    backgroundColor: colors.card,
+    borderRadius: 16,
+    padding: 16,
+    marginBottom: 16,
+    borderWidth: 1,
+    borderColor: colors.hairline,
+    alignItems: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 2,
+  },
+  matchLabel: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: colors.muted,
+    letterSpacing: 0.6,
+  },
+  matchScore: {
+    fontSize: 44,
+    fontWeight: "800",
+    color: colors.blue,
+    marginTop: 4,
+  },
+  matchTrack: {
+    width: "100%",
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: colors.fill,
+    overflow: "hidden",
+    marginTop: 8,
+  },
+  matchFill: { height: "100%", borderRadius: 4, backgroundColor: colors.blue },
+  matchSub: {
+    fontSize: 12,
+    color: colors.muted,
+    marginTop: 10,
+    textAlign: "center",
+    lineHeight: 17,
+  },
+
+  // Recent stamps list (friend view)
+  stampRow: { paddingTop: 6 },
+  stampRowDivider: {
+    marginTop: 6,
+    borderTopWidth: 1,
+    borderTopColor: colors.hairline,
+  },
+  stampCity: { fontSize: 14, fontWeight: "600", color: colors.ink },
+  stampRegion: { fontSize: 12, color: colors.muted, marginTop: 1 },
 });

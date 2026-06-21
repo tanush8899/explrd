@@ -85,7 +85,7 @@ export default function PublicProfilePage({
             {error ?? "This profile could not be found or is not public right now."}
           </p>
           <Link
-            href="/login"
+            href="/"
             className="mt-6 inline-flex rounded-xl bg-[#111214] px-5 py-2.5 text-sm font-medium text-white shadow-[0_1px_2px_rgba(0,0,0,0.12)] transition hover:bg-[#2a2d31]"
           >
             Open Explr
