@@ -40,9 +40,12 @@ const config = {
     [
       "expo-splash-screen",
       {
-        backgroundColor: "#06080d",
-        image: "./assets/splash-icon.png",
-        imageWidth: 200,
+        // Solid dark fill that matches the center of the JS SplashScreen
+        // gradient (#1a2238 → #0d1120) so the native → JS handoff is seamless.
+        // No image: the old placeholder splash-icon.png rendered as a white
+        // box on the dark background and flashed for ~0.5s before the JS
+        // splash (globe + wordmark) faded in.
+        backgroundColor: "#13192c",
       },
     ],
     [

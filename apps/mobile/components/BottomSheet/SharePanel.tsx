@@ -2,6 +2,7 @@ import React, { useContext, useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  Animated,
   ScrollView,
   Share,
   StyleSheet,
@@ -104,6 +105,27 @@ function compareSub(mine: number, avg: number, unit = ""): string {
   if (diff > 0) return `${diff}${unit} above the average explorer · avg ${avg}${unit}`;
   if (diff < 0) return `${Math.abs(diff)}${unit} below the average explorer · avg ${avg}${unit}`;
   return `Right on the average · ${avg}${unit}`;
+}
+
+// Fades + gently rises its children in on mount. Used for sections that appear
+// after an async fetch (e.g. "How You Compare") so they ease in instead of
+// popping in once the data lands.
+function MountFade({ children }: { children: React.ReactNode }) {
+  const opacity = useRef(new Animated.Value(0)).current;
+  const translateY = useRef(new Animated.Value(10)).current;
+
+  useEffect(() => {
+    Animated.parallel([
+      Animated.timing(opacity, { toValue: 1, duration: 420, useNativeDriver: true }),
+      Animated.spring(translateY, { toValue: 0, tension: 60, friction: 10, useNativeDriver: true }),
+    ]).start();
+  }, [opacity, translateY]);
+
+  return (
+    <Animated.View style={{ opacity, transform: [{ translateY }] }}>
+      {children}
+    </Animated.View>
+  );
 }
 
 // ─── Panel ────────────────────────────────────────────────────────────────────
@@ -222,7 +244,7 @@ export default function SharePanel({ places }: Props) {
         <>
           {/* ── How you compare ──────────────────────────────────────────────── */}
           {community?.enoughData && community.you && community.averages && (
-            <>
+            <MountFade>
               <SectionHeading>How You Compare</SectionHeading>
 
               <View style={styles.compareHero}>
@@ -261,7 +283,7 @@ export default function SharePanel({ places }: Props) {
                   }
                 />
               )}
-            </>
+            </MountFade>
           )}
 
           {/* ── Highlights ───────────────────────────────────────────────────── */}
