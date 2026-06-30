@@ -221,12 +221,7 @@ export default function PhotoSyncView({ mode, onClose }: Props) {
     <LinearGradient colors={gradients.auth} style={styles.root}>
       <View style={[styles.container, { paddingTop: insets.top + 16, paddingBottom: insets.bottom + 20 }]}>
         {phase === "intro" && (
-          <Intro
-            mode={mode}
-            error={error}
-            onStart={handleStart}
-            onSkip={handleSkip}
-          />
+          <Intro mode={mode} error={error} onStart={handleStart} />
         )}
 
         {phase === "denied" && (
@@ -316,13 +311,16 @@ function Intro({
   mode,
   error,
   onStart,
-  onSkip,
 }: {
   mode: "onboarding" | "resync";
   error: string | null;
   onStart: () => void;
-  onSkip: () => void;
 }) {
+  // Apple Guideline 5.1.1(iv): the message shown before a permission request
+  // must not include an exit button that lets the user dodge the request. The
+  // only action here proceeds to the system photo-access prompt; the user's
+  // decline path is the system dialog itself (→ the "Denied" screen, which can
+  // then offer a way out *after* the request).
   return (
     <View style={styles.centered}>
       <ImportAnimation />
@@ -346,11 +344,6 @@ function Intro({
         <TouchableOpacity style={styles.primaryBtn} onPress={onStart} activeOpacity={0.85}>
           <Ionicons name="sparkles" size={18} color="#fff" />
           <Text style={styles.primaryBtnText}>Scan your photo gallery</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.skipBtn} onPress={onSkip} activeOpacity={0.7}>
-          <Text style={styles.skipText}>
-            {mode === "onboarding" ? "Not now" : "Cancel"}
-          </Text>
         </TouchableOpacity>
       </View>
     </View>

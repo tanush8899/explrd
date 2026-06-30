@@ -1,4 +1,5 @@
 import * as WebBrowser from "expo-web-browser";
+import * as AppleAuthentication from "expo-apple-authentication";
 import { makeRedirectUri } from "expo-auth-session";
 import Constants from "expo-constants";
 import {
@@ -79,5 +80,47 @@ export async function signInWithGoogleNative() {
       refresh_token: params.refresh_token ?? "",
     });
     if (sessionError) throw sessionError;
+  }
+}
+
+export async function signInWithAppleNative() {
+  const credential = await AppleAuthentication.signInAsync({
+    requestedScopes: [
+      AppleAuthentication.AppleAuthenticationScope.FULL_NAME,
+      AppleAuthentication.AppleAuthenticationScope.EMAIL,
+    ],
+  });
+
+  if (!credential.identityToken) {
+    throw new Error("Apple Sign In did not return an identity token.");
+  }
+
+  const { error } = await supabase.auth.signInWithIdToken({
+    provider: "apple",
+    token: credential.identityToken,
+  });
+
+  if (error) throw error;
+
+  // Apple only returns the user's name on the *first* authorization for this
+  // Apple ID. Capture it now and persist it to the user's metadata so the rest
+  // of the app (and onboarding) can use it — we must never ask the user to type
+  // a name Apple has already given us (App Store Guideline 4 / Sign in with
+  // Apple requirements).
+  const given = credential.fullName?.givenName?.trim() || "";
+  const family = credential.fullName?.familyName?.trim() || "";
+  if (given || family) {
+    const full = [given, family].filter(Boolean).join(" ");
+    try {
+      await supabase.auth.updateUser({
+        data: {
+          ...(given ? { first_name: given } : {}),
+          ...(family ? { last_name: family } : {}),
+          ...(full ? { full_name: full } : {}),
+        },
+      });
+    } catch {
+      // Non-fatal: the name is a convenience, not required to sign in.
+    }
   }
 }

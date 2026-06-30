@@ -32,11 +32,25 @@ type AvailState =
  */
 export default function OnboardingProfile() {
   const insets = useSafeAreaInsets();
-  const { session } = useSession();
+  const { session, user } = useSession();
   const { profile, refresh, setProfile } = useProfile();
 
-  const [firstName, setFirstName] = useState(profile?.first_name ?? "");
-  const [lastName, setLastName] = useState(profile?.last_name ?? "");
+  // Names supplied by the identity provider (e.g. Sign in with Apple / Google).
+  // We pre-fill from these so the user never has to re-type a name the provider
+  // already gave us.
+  const meta = (user?.user_metadata ?? {}) as {
+    first_name?: string;
+    last_name?: string;
+    full_name?: string;
+    name?: string;
+  };
+  const metaFull = (meta.full_name ?? meta.name ?? "").trim();
+  const metaFirst = meta.first_name ?? metaFull.split(" ")[0] ?? "";
+  const metaLast =
+    meta.last_name ?? (metaFull ? metaFull.split(" ").slice(1).join(" ") : "");
+
+  const [firstName, setFirstName] = useState(profile?.first_name || metaFirst || "");
+  const [lastName, setLastName] = useState(profile?.last_name || metaLast || "");
   const [username, setUsername] = useState(profile?.username ?? "");
   const [avail, setAvail] = useState<AvailState>({ kind: "idle" });
   const [submitting, setSubmitting] = useState(false);
@@ -69,9 +83,12 @@ export default function OnboardingProfile() {
   // Gate on a valid format + a name. The availability check is advisory — block
   // only when it explicitly reports "taken"; the server is the final authority
   // on save (returns 409), so a flaky check can never soft-lock onboarding.
+  // Only the username (an explrd-specific handle) is required. The name is
+  // optional and pre-filled from the identity provider when available — we must
+  // never force the user to supply a name that Sign in with Apple already
+  // provided, and re-authorizing an Apple ID returns no name at all.
   const formatValid = validateUsername(username).ok;
-  const canSubmit =
-    firstName.trim().length > 0 && formatValid && avail.kind !== "bad" && !submitting;
+  const canSubmit = formatValid && avail.kind !== "bad" && !submitting;
 
   async function handleSubmit() {
     if (!session?.access_token || !canSubmit) return;
@@ -79,8 +96,8 @@ export default function OnboardingProfile() {
     setError(null);
     try {
       const updated = await updateProfile(session.access_token, {
-        first_name: firstName.trim(),
-        last_name: lastName.trim(),
+        first_name: firstName.trim() || undefined,
+        last_name: lastName.trim() || undefined,
         username,
       });
       setProfile(updated);

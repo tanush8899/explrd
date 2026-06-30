@@ -12,11 +12,13 @@ import {
 } from "react-native";
 import { useRouter } from "expo-router";
 import { LinearGradient } from "expo-linear-gradient";
+import { Ionicons } from "@expo/vector-icons";
 import { useSession } from "@/lib/SessionContext";
 import {
   signInWithEmail,
   signUpWithEmail,
   signInWithGoogleNative,
+  signInWithAppleNative,
 } from "@/lib/auth";
 import { colors, gradients } from "@/lib/theme";
 
@@ -35,6 +37,7 @@ export default function LoginScreen() {
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
+  const [appleLoading, setAppleLoading] = useState(false);
 
   // Redirect once authenticated
   useEffect(() => {
@@ -75,6 +78,21 @@ export default function LoginScreen() {
     }
   }
 
+  async function handleAppleSignIn() {
+    setError(null);
+    setAppleLoading(true);
+    try {
+      await signInWithAppleNative();
+    } catch (err: any) {
+      // USER_CANCELED is not an error worth showing
+      if (err?.code !== "ERR_REQUEST_CANCELED") {
+        setError(err instanceof Error ? err.message : "Apple sign-in failed.");
+      }
+    } finally {
+      setAppleLoading(false);
+    }
+  }
+
   if (loading) {
     return (
       <View style={styles.loadingRoot}>
@@ -110,8 +128,8 @@ export default function LoginScreen() {
               {/* Google button */}
               <TouchableOpacity
                 onPress={handleGoogleSignIn}
-                disabled={googleLoading || submitting}
-                style={styles.googleBtn}
+                disabled={googleLoading || submitting || appleLoading}
+                style={styles.socialBtn}
                 activeOpacity={0.85}
               >
                 {googleLoading ? (
@@ -119,10 +137,35 @@ export default function LoginScreen() {
                 ) : (
                   <>
                     <Text style={styles.googleG}>G</Text>
-                    <Text style={styles.googleLabel}>Continue with Google</Text>
+                    <Text style={styles.socialLabel}>Continue with Google</Text>
                   </>
                 )}
               </TouchableOpacity>
+
+              {/* Apple button — iOS only. Custom (HIG-compliant) so it matches
+                  the Google button's size, shape, and font exactly. */}
+              {Platform.OS === "ios" && (
+                <TouchableOpacity
+                  onPress={handleAppleSignIn}
+                  disabled={googleLoading || submitting || appleLoading}
+                  style={styles.socialBtn}
+                  activeOpacity={0.85}
+                >
+                  {appleLoading ? (
+                    <ActivityIndicator size="small" color="#111214" />
+                  ) : (
+                    <>
+                      <Ionicons
+                        name="logo-apple"
+                        size={18}
+                        color="#111214"
+                        style={styles.appleIcon}
+                      />
+                      <Text style={styles.socialLabel}>Sign in with Apple</Text>
+                    </>
+                  )}
+                </TouchableOpacity>
+              )}
 
               {/* Divider */}
               <View style={styles.dividerRow}>
@@ -276,17 +319,20 @@ const styles = StyleSheet.create({
     color: "#ffffff",
   },
 
-  googleBtn: {
+  // Shared style so Google and Apple buttons are perfectly symmetrical —
+  // identical height, shape, icon size, and label font.
+  socialBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 10,
     backgroundColor: "#ffffff",
     borderRadius: 999,
-    paddingVertical: 14,
+    height: 52,
   },
   googleG: { fontSize: 16, fontWeight: "700", color: "#4285F4" },
-  googleLabel: { fontSize: 15, fontWeight: "600", color: "#111214" },
+  appleIcon: { marginTop: -2 },
+  socialLabel: { fontSize: 15, fontWeight: "600", color: "#111214" },
 
   dividerRow: { flexDirection: "row", alignItems: "center", gap: 12 },
   dividerLine: { flex: 1, height: 1, backgroundColor: "rgba(255,255,255,0.10)" },

@@ -59,6 +59,7 @@ const config = {
     "expo-sharing",
     "expo-status-bar",
     "expo-web-browser",
+    "expo-apple-authentication",
     [
       "expo-notifications",
       {
