@@ -299,8 +299,8 @@ export default function AddPlacePanel({
         <TextInput
           ref={inputRef}
           style={styles.input}
-          placeholder="e.g. Tokyo, Paris, or Big Ben"
-          placeholderTextColor="#9aa0a6"
+          placeholder="Search city, landmark, university, park…"
+          placeholderTextColor="#868c94"
           value={query}
           onChangeText={handleSearch}
           onFocus={onSearchFocus}
@@ -374,6 +374,15 @@ export default function AddPlacePanel({
           <Ionicons name="search" size={26} color="#c6c9ce" />
           <Text style={styles.emptyTitle}>No Cities Found</Text>
           <Text style={styles.emptyDesc}>Try a city or a famous landmark</Text>
+        </View>
+      )}
+
+      {/* Hint when idle */}
+      {!selected && query.length === 0 && (
+        <View style={styles.hintBox}>
+          <Text style={styles.hintText}>
+            Search by city, country, landmark, university, or national park. We'll find the nearest city for you.
+          </Text>
         </View>
       )}
     </ScrollView>
@@ -466,15 +475,26 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   resultSecondary: {
-    fontSize: 13,
-    color: "#85898f",
-    marginTop: 1,
+    fontSize: 12,
+    color: "#868c94",
+    marginTop: 2,
   },
   resultLandmark: {
     fontSize: 11,
     color: "#a0a7b0",
     marginTop: 2,
     fontStyle: "italic",
+  },
+  hintBox: {
+    marginTop: 20,
+    padding: 14,
+    backgroundColor: "#f7f8f9",
+    borderRadius: 12,
+  },
+  hintText: {
+    fontSize: 13,
+    color: "#85898f",
+    marginTop: 1,
   },
 
   // Empty state
