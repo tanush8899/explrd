@@ -3,7 +3,7 @@
 // The website is a single, minimal page that points people to the iOS app.
 // Drop the App Store URL into APP_STORE_URL once the listing is live; until
 // then the badge renders in a non-interactive "coming soon" state.
-const APP_STORE_URL = "";
+const APP_STORE_URL = "https://apps.apple.com/app/explrd/id6762485826";
 
 function AppleLogo() {
   return (

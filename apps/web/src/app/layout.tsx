@@ -6,7 +6,7 @@ import "leaflet/dist/leaflet.css";
 
 export const metadata = {
   title: "EXPLRD — Track where you've explored",
-  description: "Track every place you've explored, see your travel stats, and share your map with friends. Coming soon on iPhone.",
+  description: "Track every place you've explored, see your travel stats, and share your map with friends. Now on the App Store.",
 };
 
 export const viewport: Viewport = {
